@@ -1,0 +1,91 @@
+Facebook Login for Business — what you still need to do
+=========================================================
+
+The code is fully implemented (service, controller, routes, config, "Connect
+with Facebook" button on the My Apps page). Before it can actually work,
+you need to do the following on your end:
+
+1. Get your App Secret and put it in .env
+   -------------------------------------------------------------
+   FACEBOOK_APP_SECRET is intentionally left blank in .env / .env.example —
+   it must never be committed to source control.
+
+   Go to: https://developers.facebook.com/apps/4352884514965379/settings/basic/
+   Copy "App Secret" and set it in your .env file:
+
+       FACEBOOK_APP_SECRET=paste-it-here
+
+   (Do this in every environment — local, staging, production — with each
+   environment's own .env. Never share this value or commit it.)
+
+2. Register the exact redirect URI in the Meta App dashboard
+   -------------------------------------------------------------
+   Go to: Facebook Login for Business → Settings (in your app dashboard)
+   Under "Valid OAuth Redirect URIs", add:
+
+       {APP_URL}/facebook/callback
+
+   Right now FACEBOOK_REDIRECT_URI in .env resolves to:
+
+       ${APP_URL}/facebook/callback
+
+   which currently evaluates to:
+
+       https://facebook-automation.test/facebook/callback
+
+   If you deploy to a different domain, update APP_URL (and re-register the
+   new redirect URI on Facebook) — the two must match EXACTLY (scheme, host,
+   path, trailing slash) or Facebook will reject the callback.
+
+   Facebook requires HTTPS for redirect URIs in Live mode. For local testing
+   over plain HTTP, keep the app in Development mode and log in as an App
+   Role (Admin/Developer/Tester) — see step 4.
+
+3. Confirm the Facebook Login for Business configuration (Config ID)
+   -------------------------------------------------------------
+   Config ID already set: 1009155328848762
+
+   Open your app's "Facebook Login for Business" product → Configurations,
+   and make sure this configuration includes every permission you'll need
+   for the features already built in this app, e.g.:
+
+     - pages_show_list
+     - pages_read_engagement
+     - pages_manage_posts        (needed to publish text/image posts)
+     - pages_manage_engagement   (needed to post/read comments)
+     - business_management       (if the Pages are owned by a Business
+                                   Portfolio rather than the personal account)
+
+   The permissions requested during login are controlled by this
+   Configuration on Meta's side, not by this codebase — if a permission is
+   missing here, the Page(s) returned by /me/accounts may lack the access
+   your app needs even though the connection itself succeeds.
+
+4. App Mode: Development vs Live
+   -------------------------------------------------------------
+   While the app is in Development mode, only people added as an Admin,
+   Developer, or Tester under App Roles can complete the login flow.
+   To let real customers connect their own Pages, submit the required
+   permissions above for App Review and switch the app to Live mode.
+
+5. Test the flow
+   -------------------------------------------------------------
+   Once 1–4 are done:
+     - Log in to this app, go to "My Apps".
+     - Click "Connect with Facebook".
+     - Approve on Facebook's dialog and pick the Page(s) to grant access to.
+     - You'll land back on "My Apps" with a new app entry named
+       "Facebook Login — <your Facebook name>", and its connected Pages
+       already listed as accounts underneath it — ready to use with the
+       existing Text/Image post and comment features immediately (no need
+       to separately click "Generate Token" or "Fetch Accounts" — this flow
+       already fetched the Pages and their access tokens for you).
+
+6. If something fails
+   -------------------------------------------------------------
+   Every failed Graph API call during this flow is logged to
+   storage/logs/laravel.log (endpoint, HTTP status, and Facebook's full
+   error payload), and a human-readable message is flashed back to the
+   "My Apps" page. Check the log first — it will almost always point to a
+   redirect URI mismatch, an expired/incorrect App Secret, or a missing
+   permission in the Business Login Configuration.
