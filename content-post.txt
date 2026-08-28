@@ -1,0 +1,86 @@
+create a menu name `Post` and add a sub menu name `Text`, `Image` and add a sub menu name `Post List`
+
+now implement only Text Post functionality in the `Post` menu.
+read migration files and thier models
+ - database/migrations/2026_08_28_004709_create_post_contents_table.php
+ - database/migrations/2026_08_28_003818_create_posts_table.php
+
+
+in create text post form add a select one or multiple account id,
+a text area input box, others in migration file.
+
+after create post
+ - save post data in `posts` table
+ - save post content in `post_contents` table
+
+ if multiple account selected its mean looping in post if is_schedule true its skip to hit post api and save in database only, if is_schedule false then hit post api and save in database.
+ after text post save in posts table post_type='text', post_id=facebook post id,
+
+ if failed is_published=false, post_id=null, save in database only. if success is_published=true, post_id=facebook post id, save in database.
+
+ also save in post_contents table content_type=`text` .
+ content_path=after medial helper created path,
+
+ when api call then media url get media helper get url
+
+ for image upload read app/Helpers/MediaHelper.php and implement image upload functionality in the `Post` menu.
+
+Example Request for text post:
+POST /v26.0/1225886523948952/feed HTTP/1.1
+Host: graph.facebook.com
+message:
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer EAA927OdDR4MBSf7nxvF2ziCbg2tI7e0BctkBWXBBFPZAYIFwmWRokRzQCBJIR5LXhXMVEP4NuyTol41n4rZCxAccLlFT23qnvgPNlcDUooxOcdDW9iKU3zZBduhQOw2sIKbWPs5D8SQIbBr5aWe6UtzYka4ZA5TVqfBmwYlGPkKy5NKctOWsBFj2pQayHkDhhOIf
+Content-Length: 36
+
+message=Hello%20I%20am%20Test%20Post
+
+
+Example Response for text post:
+{
+    "id": "1225886523948952_122094391191466200"
+}
+
+---------- Image Post --------------
+
+- when image post form add a select one or multiple account id, a file input box, others in migration file.
+- after create post
+  - post_type=`image` in posts table
+  - content_type=`image` in post_content table
+
+for upload media use MediaHelper following @project-guide.txt
+
+first post save in database then when send graph api then make url using media helper url() mehtod read the full file,
+
+Example Request
+
+POST /v26.0/1225886523948952/photos HTTP/1.1
+Host: graph.facebook.com
+message:
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer page_access token
+Content-Length: 515
+
+caption=%E2%80%98%E0%A6%A6%E0%A7%81%E0%A6%9C%E0%A6%A8%20%E0%A6%AE%E0%A6%BE%E0%A6%A6%E0%A6%95%E0%A6%BE%E0%A6%B8%E0%A6%95%E0%A7%8D%E0%A6%A4%20%E0%A6%AF%E0%A7%81%E0%A6%AC%E0%A6%95%20%E0%A6%9A%E0%A6%BE%E0%A6%B0%E0%A6%9C%E0%A6%A8%E0%A6%95%E0%A7%87%20%E0%A6%B9%E0%A6%A4%E0%A7%8D%E0%A6%AF%E0%A6%BE%20%E0%A6%95%E0%A6%B0%E0%A6%A4%E0%A7%87%20%E0%A6%AA%E0%A6%BE%E0%A6%B0%E0%A7%87%20%E0%A6%A8%E0%A6%BE%E2%80%99&url=https%3A%2F%2Ffiles.agamirsomoy.com%2Fbn-media%2Fuploads%2F2026%2F08%2F58569a3d-859f-4f88-8123-d2131dad4f7e.webp
+
+--- Comment In Post --
+in post page image and text thire one check box also comment a post,
+if checkbox checked then show a comment box section their two input one input for attacment file, another is text area.
+two are optional but any one need.
+
+after input comment its save in post_comments table,
+
+example request
+POST /v26.0/1225886523948952_122094410631466200/comments HTTP/1.1
+Host: graph.facebook.com
+Content-Type: application/x-www-form-urlencoded
+Authorization: ••••••
+Content-Length: 113
+
+message=hi%20am%20testing&attachment_url=https%3A%2F%2Fstatic.xx.fbcdn.net%2Frsrc.php%2FyB%2Fr%2F83zWJdc6PJI.webp
+
+end example response
+{
+    "id": "122094410631466200_1065993882488777"
+}
+

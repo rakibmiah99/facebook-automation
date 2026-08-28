@@ -1,0 +1,110 @@
+create facebook repository interface
+app/Repositories/FacebookRepositoryInterface.php
+
+make helper in
+    app/Helpers/FacebookHelper.php
+
+bind interface and helper in
+    app/Providers/RepositoryServiceProvider.php
+
+---
+base_url: https://graph.facebook.com/
+version: v26.0
+url: base_url + version
+
+1. create access token to long live token
+so get url here (url+"/oauth/access_token")
+
+example code HTTP
+GET /v26.0/oauth/access_token?grant_type=fb_exchange_token&client_id=4352884514965379&client_secret=a3a755603335c9de1db78a079f17a91c&fb_exchange_token=EAA927OdDR4MBSYHJwdTv0DMPYgYLKPX1Kmqc3FNmN3oAZBTuZBeKQ7v4jSVXl1i9SOydwckO0QFw108RVKENnkNNaYOkTfjk4jdvZBkwsFeW0V6ddnDS49sFq9vvC3cGZCqG0ud9oZANteLAjcWe3g0wZALiZAOR1agl9TDrdYZA4BkmW1YAUnSIdlujz4ocmBjZCH2mJ0y6yCZA85ZC6BzUYzr9rUrisqiQjCSqpS19eD41ziPxMeVa74Po2nOfD3Wg33FcR7uZAscvXqTw HTTP/1.1
+Host: graph.facebook.com
+Authorization: Bearer access_token_here
+
+example response
+{
+    "access_token": "EAA927OdDR4MBSdBGbwnNw1u8PcI8ZAXndXERYuY4L2vfsByhH1LS0nmbHpA29OwW7qtkiZCLAcBFad9VONqqyvgqBd1Gh2cc5s1XcUaZBEjdtpugJ4BPAPg2fDG1MoPUZBJbdET3AawJkCyq3kAtjBMYf4rJ1q6HhrPX0JA1NBHLA18eE3jEISnuNrb2",
+    "token_type": "bearer",
+    "expires_in": 5183999
+}
+
+2. Get Account List
+example code HTTP
+GET /v26.0/me/accounts?fields=id,name,access_token,fan_count,link HTTP/1.1
+Host: graph.facebook.com
+Authorization: Bearer facebook_app_long_lived_token_here
+
+
+example response
+{
+    "data": [
+        {
+            "id": "1225886523948952",
+            "name": "টেক ব্যাক বাংলাদেশ",
+            "access_token": "EAA927OdDR4MBSZAT7UHoWkLr1TJVWkym4T8HZC4kBem4N8JhKWQibCrFxuIKZBRQk7MMdZCD10wjS9DX5cMrZCJzos3ZAFhqusmT7MwEkUwRZCpcgZCrIZBP7btiokTJkV63H0IZBS2NOu5sxeDVYliDQXwv1rhJZCfduNoyWmWSxX6BYO03iTsQIWRAlvZAAtEc28jNceLW",
+            "fan_count": 0,
+            "link": "https://www.facebook.com/1225886523948952"
+        },
+        {
+            "id": "1039866605867835",
+            "name": "ভয়েস অব শ্রীবরদী",
+            "access_token": "EAA927OdDR4MBSfMlrMasw1BoaJfmXPNdmSoAveA69I4MYARhSJaXsEa9OOLUsMCy9dpjJp5tajequkiMdEYZAXjECbGFGZCya7Q8vCzDxfZBhzvj2kg1jqcr3F8HDP9WMqcpdZCkVlvnmxRnOuyyk4ifwZBbGqEayoZAuqgTBHTtZB0jplvrWvlwnvDLWRacJNMfibm",
+            "fan_count": 31,
+            "link": "https://www.facebook.com/1039866605867835"
+        },
+        {
+            "id": "977999148723763",
+            "name": "জনতার প্রশ্ন",
+            "access_token": "EAA927OdDR4MBSVjG7HSLj7yEVa1p7JaZC2YvPH9ttrHlzaLcw8iT5lvhUAwFjPTgbPwilTQSqpxxI9ZCV3SfEmczkyKuY9PzQTqI1fZB2lKbZBQv2HLngocmDQSkwTt67iRGWXaSH4Ej3g5K8U5po2q8AJjIiHN2GyLvjB8UBxZAQsX1eZBSS31NZCqVImAbxXJzDTh",
+            "fan_count": 0,
+            "link": "https://www.facebook.com/977999148723763"
+        },
+        {
+            "id": "424591700744068",
+            "name": "Sreebardi It & Language Club",
+            "access_token": "EAA927OdDR4MBSRGspEXDZAc0iI4az3SaixFTDrJtQlBcOr3Y6TH9oZCjqHqPBQG28xLqhoedZCGIQOYa5QonKrRmZCuVYgcCnRPwKZC14OYcmETU2aHIGdV9aJqrZCs7JAwo2DZBzER8T3wEZCCkJ2bhXizydrJZASZCkDrZCSYsaor7Lse0MDgLmvT5ImNvP3IPJZBQk3Ms",
+            "fan_count": 63,
+            "link": "https://www.facebook.com/424591700744068"
+        },
+        {
+            "id": "396784450185322",
+            "name": "Sreebardi Student Union",
+            "access_token": "EAA927OdDR4MBSenYq3ySjOSYfuKvVjxZBpiStLSu0s5P5lF8ydZA1hIZChZCdODMv0ZBvOU8ZCZAViPuQ58ZANrpS1fZBMNyFCdbFZC5ENA5MG4dhaHUkxrBuEXnT1zJ91yfujRFnfOs4yOKIhG13f4SHZA3lfGZAqkjFQ2JkO20Aa7xq19ny4jXBZBOhtoKbmPVs4L2XvItC",
+            "fan_count": 232,
+            "link": "https://www.facebook.com/396784450185322"
+        },
+        {
+            "id": "314114225122581",
+            "name": "Programming With Rakib",
+            "access_token": "EAA927OdDR4MBSTJAq4ZBHmZA6XajyM5RCohZCZB4SYq2KjhAxpOKVFCtOfaJ121Sz0XSiw4XliQvCtu6oyEhNSFyUJEqfXtqqRGub9DGuTZCvyX04wYRzTZBC9V1FIBjL7KliXG4yzZAllvm7cczYU4hZCtKCbaPhsgdYDC4EWasn0MT8eYld259wQ7lDBZCnRtnS7AwL",
+            "fan_count": 64,
+            "link": "https://www.facebook.com/314114225122581"
+        },
+        {
+            "id": "109528921362663",
+            "name": "Programming hunt",
+            "access_token": "EAA927OdDR4MBSaEMTM0LFwDVlZCLGMXZBe9Ij4KHHE11bOidOREItWSyJ4CAiLZAVezJtodqZAjPzxuXINMFHp6IneP5seCV2b8lqqhFKY08SUvliZBucm37Evv8wfeJteXgWOjZAEO5ij8thzH0qaQ7CJXY2h6OgDLzZCSZAkOBPN4ZAZArZA8IEOSQmiS5laNKXWXcIEZD",
+            "fan_count": 107,
+            "link": "https://www.facebook.com/109528921362663"
+        },
+        {
+            "id": "103342865228289",
+            "name": "JavaScript Project and Explanation",
+            "access_token": "EAA927OdDR4MBSRJAtElerD4qpnhlLFhqkznHoALE7FsPWqn2goSyVyfSsuMSlG2O9yKC32ZCo2obqcnXa7ZChMF96swwEHKUSO32RxGHIOyxZBqmurpstezw91DCg1fk8T78A2mOBMk6BwzdylBgkSBNQZBmdjyscHSjTBHTDgJTW3kxOsPREas2aJLNQjZBIoTkZD",
+            "fan_count": 3,
+            "link": "https://www.facebook.com/103342865228289"
+        },
+        {
+            "id": "109652250703652",
+            "name": "Nexerbs Academy",
+            "access_token": "EAA927OdDR4MBSQe5N5j6RNhB1XZCWjzPh6BOlewf7UGOkPgwE7Djm4WmCZBSBCUQdSBUsg7LZCkRe2nZAtRxSf9rRquw1jlZBbn1cQr4t6OBPnK9VXfhfMI0iIwxoeQcNVCi0gcADs20YSZCxEYbuMVEdw1q9uFWWZBYe4fbDtHleOwWd7QsHLJkWu7xhslULR0B5AZD",
+            "fan_count": 526,
+            "link": "https://www.facebook.com/109652250703652"
+        }
+    ],
+    "paging": {
+        "cursors": {
+            "before": "QVFIVHVPVWVhM0FWc1U3c3dZAT1REWG5CMXJGbl8ybXdIUmppVE0wN1dxbUNCQ0xUSVFrTEVaV2ZAnRV9MRGlJa2lPaDAxay1RRFBueUhUYmRRdUJqN3BHVkl3",
+            "after": "QVFIVG1ZAZADgtVjRSZAlFvdER4bUVMTnhPaS1YYnRUdDhWTTBON0ZAKSkhhQVE3MTdWOFpxTWx4dTNYWTl6RVc2QWRNQVIxYnE4RHh4NzBJYS1WTVlYT0xkY1VB"
+        }
+    }
+}

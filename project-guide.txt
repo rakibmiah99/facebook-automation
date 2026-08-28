@@ -1,0 +1,1197 @@
+# Laravel + Inertia.js + React Project Guide
+
+## 1. Architecture Overview
+
+Use a clear separation of responsibilities:
+
+- **Controller** → HTTP layer, Laravel Request validation, calls Services, returns Inertia responses.
+- **Service** → Business logic and application logic.
+- **Repository** → Data access or reusable infrastructure logic where applicable.
+- **Helper** → Small reusable utility/helper logic.
+- **Inertia Page** → Page-level React UI.
+- **Components** → Reusable UI components.
+- **Types** → TypeScript types/interfaces.
+- **Ziggy** → Generate/use Laravel route URLs from React.
+
+General request flow:
+
+```text
+React Page
+    ↓
+Ziggy route(...)
+    ↓
+Laravel Route
+    ↓
+Controller
+    ↓
+Form Request / Request Validation
+    ↓
+Service
+    ↓
+Repository / Helper / Model
+    ↓
+Controller
+    ↓
+Inertia::render(...)
+    ↓
+React Page
+```
+
+---
+
+## 2. Backend Structure
+
+### Services
+
+All business/application logic should be placed in:
+
+```text
+app/Services/[ServiceName]Service.php
+```
+
+Example:
+
+```text
+app/Services/UserService.php
+app/Services/PostService.php
+app/Services/MediaService.php
+```
+
+### Controller Rule
+
+Controllers should remain thin.
+
+A controller should generally:
+
+1. Receive the HTTP request.
+2. Validate the request.
+3. Call the appropriate Service.
+4. Return an Inertia response or redirect.
+5. Avoid containing large business-logic blocks.
+
+Example:
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\PostStoreRequest;
+use App\Services\PostService;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class PostController extends Controller
+{
+    public function __construct(
+        private PostService $postService,
+    ) {
+    }
+
+    public function index(): Response
+    {
+        $data = $this->postService->index();
+
+        return Inertia::render('posts/pages/index', [
+            'data' => $data,
+        ]);
+    }
+
+    public function store(PostStoreRequest $request)
+    {
+        $this->postService->store($request);
+
+        return redirect()
+            ->route('posts.index')
+            ->with('success', 'Post created successfully.');
+    }
+}
+```
+
+---
+
+## 3. Request Validation
+
+Use Laravel Request validation in the Controller layer.
+
+For larger forms, prefer dedicated Form Request classes:
+
+```text
+app/Http/Requests/[RequestName].php
+```
+
+Example:
+
+```php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class PostStoreRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'title' => ['required', 'string', 'max:255'],
+            'content' => ['required', 'string'],
+            'file' => ['nullable', 'image', 'max:5120'],
+        ];
+    }
+}
+```
+
+Then inject the Request into the controller:
+
+```php
+public function store(PostStoreRequest $request)
+{
+    $this->postService->store($request);
+}
+```
+
+Do not duplicate the same validation rules inside the Service.
+
+---
+
+## 4. Service Structure
+
+Service files:
+
+```text
+app/Services/
+├── UserService.php
+├── PostService.php
+└── MediaService.php
+```
+
+Example:
+
+```php
+<?php
+
+namespace App\Services;
+
+use App\Http\Requests\PostStoreRequest;
+use App\Repositories\MediaHelperRepositoryInterface;
+use App\Helpers\UtilsHelper;
+
+class PostService
+{
+    public function __construct(
+        private MediaHelperRepositoryInterface $media_helper,
+    ) {
+    }
+
+    public function store(PostStoreRequest $request): void
+    {
+        $path = UtilsHelper::MonthYearWisePath();
+
+        $uploadedPath = $this->media_helper->upload(
+            $request->file('file'),
+            $path
+        );
+
+        // Business logic...
+        // Create/update model...
+    }
+}
+```
+
+### Service Responsibilities
+
+Services can contain:
+
+- Business rules.
+- Workflow logic.
+- Multiple model operations.
+- Repository calls.
+- Media handling.
+- Transaction handling.
+- External API integration.
+- Data transformation needed by the application.
+
+Avoid putting presentation/UI logic in Services.
+
+---
+
+## 5. Inertia Responses
+
+Controllers return Inertia pages.
+
+Use:
+
+```php
+return Inertia::render('module-name/pages/page-name', [
+    'data' => $data,
+]);
+```
+
+Example:
+
+```php
+public function index(): Response
+{
+    $data = $this->postService->index();
+
+    return Inertia::render('posts/pages/index', [
+        'data' => $data,
+    ]);
+}
+```
+
+The first argument must match the module/page location in:
+
+```text
+resources/js/modules/
+```
+
+---
+
+# 6. Frontend Module Structure
+
+Use module-wise organization.
+
+```text
+resources/js/modules/
+└── [module-name]/
+    ├── pages/
+    │   └── [page-name].tsx
+    ├── components/
+    │   └── [component-name].tsx
+    └── types/
+        └── [type-name].ts
+```
+
+Example:
+
+```text
+resources/js/modules/posts/
+├── pages/
+│   ├── index.tsx
+│   ├── create.tsx
+│   └── edit.tsx
+├── components/
+│   ├── PostForm.tsx
+│   └── PostTable.tsx
+└── types/
+    └── post.ts
+```
+
+---
+
+# 7. Shared Frontend Structure
+
+Reusable application-wide code belongs under:
+
+```text
+resources/js/shared/
+├── layouts/
+│   └── [layout-name].tsx
+├── components/
+│   └── [component-name].tsx
+├── types/
+│   └── [type-name].ts
+└── utils/
+    └── [util-name].ts
+```
+
+### Shared vs Module
+
+Put something in `shared/` when it is reusable across multiple modules.
+
+Put something in `modules/[module-name]/` when it is specific to one module.
+
+Example:
+
+```text
+resources/js/shared/components/Button.tsx
+```
+
+is appropriate for a globally reusable button.
+
+```text
+resources/js/modules/posts/components/PostTable.tsx
+```
+
+is appropriate for a post-specific table.
+
+---
+
+# 8. Inertia React Pages
+
+Example page:
+
+```tsx
+import { Head } from '@inertiajs/react';
+
+interface Props {
+    data: {
+        posts: Array<{
+            id: number;
+            title: string;
+        }>;
+    };
+}
+
+export default function Index({ data }: Props) {
+    return (
+        <>
+            <Head title="Posts" />
+
+            <div>
+                <h1>Posts</h1>
+
+                {data.posts.map((post) => (
+                    <div key={post.id}>
+                        {post.title}
+                    </div>
+                ))}
+            </div>
+        </>
+    );
+}
+```
+
+Page location:
+
+```text
+resources/js/modules/posts/pages/index.tsx
+```
+
+---
+
+# 9. Ziggy Route Usage
+
+Do not hard-code Laravel URLs in React components.
+
+Use Ziggy's `route()` helper.
+
+Example:
+
+```tsx
+import { Link } from '@inertiajs/react';
+
+<Link href={route('posts.index')}>
+    Posts
+</Link>
+```
+
+Route with parameter:
+
+```tsx
+<Link href={route('posts.show', { post: post.id })}>
+    View
+</Link>
+```
+
+Another example:
+
+```tsx
+const url = route('posts.edit', { post: post.id });
+```
+
+Then:
+
+```tsx
+window.location.href = url;
+```
+
+### Preferred Rule
+
+Use Laravel route names:
+
+```tsx
+route('route-name')
+```
+
+or:
+
+```tsx
+route('route-name', { param: value })
+```
+
+Do not write:
+
+```tsx
+href="/posts"
+```
+
+when a named Laravel route exists.
+
+---
+
+# 10. Inertia Links
+
+For navigation, prefer Inertia's `Link`:
+
+```tsx
+import { Link } from '@inertiajs/react';
+
+<Link href={route('posts.index')}>
+    Posts
+</Link>
+```
+
+For buttons:
+
+```tsx
+<Link
+    href={route('posts.create')}
+    className="btn btn-primary"
+>
+    Create Post
+</Link>
+```
+
+---
+
+# 11. Forms
+
+Use Inertia's form functionality for normal Laravel/Inertia forms.
+
+Example:
+
+```tsx
+import { useForm } from '@inertiajs/react';
+
+const form = useForm({
+    title: '',
+    content: '',
+});
+
+const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+
+    form.post(route('posts.store'));
+};
+```
+
+Form:
+
+```tsx
+<form onSubmit={submit}>
+    <input
+        value={form.data.title}
+        onChange={(event) =>
+            form.setData('title', event.target.value)
+        }
+    />
+
+    <textarea
+        value={form.data.content}
+        onChange={(event) =>
+            form.setData('content', event.target.value)
+        }
+    />
+
+    <button type="submit" disabled={form.processing}>
+        Save
+    </button>
+</form>
+```
+
+Display validation errors:
+
+```tsx
+{form.errors.title && (
+    <div>{form.errors.title}</div>
+)}
+```
+
+---
+
+# 12. Image Upload
+
+Image/media upload uses the existing Media Helper architecture:
+
+```text
+app/Repositories/MediaHelperRepository.php
+app/Helpers/MediaHelper.php
+app/Providers/RepositoryServiceProvider.php
+```
+
+The repository interface should be injected where media functionality is required.
+
+Example Service dependency:
+
+```php
+private $media_helper;
+
+public function __construct(
+    MediaHelperRepositoryInterface $mediaHelper,
+) {
+    $this->media_helper = $mediaHelper;
+}
+```
+
+Recommended modern PHP property promotion:
+
+```php
+public function __construct(
+    private MediaHelperRepositoryInterface $mediaHelper,
+) {
+}
+```
+
+---
+
+# 13. Uploading an Image
+
+Use:
+
+```php
+$path = UtilsHelper::MonthYearWisePath();
+
+$uploadedPath = $this->media_helper->upload(
+    $request->file('file'),
+    $path
+);
+```
+
+Example inside a Service:
+
+```php
+public function store(PostStoreRequest $request): void
+{
+    $uploadedPath = null;
+
+    if ($request->hasFile('file')) {
+        $path = UtilsHelper::MonthYearWisePath();
+
+        $uploadedPath = $this->media_helper->upload(
+            $request->file('file'),
+            $path
+        );
+    }
+
+    // Save $uploadedPath with the model...
+}
+```
+
+Do not implement the actual storage logic repeatedly in individual Services.
+
+The shared Media Helper/Repository layer should handle it.
+
+---
+
+# 14. Getting Image URL
+
+After obtaining the stored path:
+
+```php
+$this->media_helper->url($uploadedPath);
+```
+
+Example:
+
+```php
+$imageUrl = $this->media_helper->url($uploadedPath);
+```
+
+If the API/page data needs a public image URL, transform the stored path before returning it.
+
+Example:
+
+```php
+return [
+    'id' => $post->id,
+    'title' => $post->title,
+    'image' => $post->image
+        ? $this->media_helper->url($post->image)
+        : null,
+];
+```
+
+---
+
+# 15. Repository Service Provider
+
+Repository bindings should be registered in:
+
+```text
+app/Providers/RepositoryServiceProvider.php
+```
+
+Example pattern:
+
+```php
+$this->app->bind(
+    MediaHelperRepositoryInterface::class,
+    MediaHelperRepository::class
+);
+```
+
+This allows Services to depend on the interface:
+
+```php
+MediaHelperRepositoryInterface
+```
+
+instead of directly depending on the implementation.
+
+---
+
+# 16. React Image Upload
+
+Example:
+
+```tsx
+import { useForm } from '@inertiajs/react';
+
+const form = useForm({
+    title: '',
+    file: null as File | null,
+});
+
+const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+
+    form.post(route('posts.store'));
+};
+```
+
+File input:
+
+```tsx
+<input
+    type="file"
+    accept="image/*"
+    onChange={(event) => {
+        form.setData(
+            'file',
+            event.target.files?.[0] ?? null
+        );
+    }}
+/>
+```
+
+If the form contains a file, let Inertia handle the request as multipart form data according to the installed Inertia version/configuration.
+
+---
+
+# 17. Laravel Routes
+
+Keep route names meaningful and consistent.
+
+Example:
+
+```php
+Route::get('/posts', [PostController::class, 'index'])
+    ->name('posts.index');
+
+Route::get('/posts/create', [PostController::class, 'create'])
+    ->name('posts.create');
+
+Route::post('/posts', [PostController::class, 'store'])
+    ->name('posts.store');
+
+Route::get('/posts/{post}/edit', [PostController::class, 'edit'])
+    ->name('posts.edit');
+
+Route::put('/posts/{post}', [PostController::class, 'update'])
+    ->name('posts.update');
+
+Route::delete('/posts/{post}', [PostController::class, 'destroy'])
+    ->name('posts.destroy');
+```
+
+React should reference these names through Ziggy:
+
+```tsx
+route('posts.index')
+route('posts.create')
+route('posts.store')
+route('posts.edit', { post: post.id })
+route('posts.update', { post: post.id })
+route('posts.destroy', { post: post.id })
+```
+
+---
+
+# 18. Naming Conventions
+
+## PHP
+
+Classes:
+
+```text
+PostService
+PostController
+PostStoreRequest
+MediaHelperRepository
+RepositoryServiceProvider
+```
+
+Methods:
+
+```text
+index()
+create()
+store()
+show()
+edit()
+update()
+destroy()
+```
+
+## React
+
+Components:
+
+```text
+PostForm.tsx
+PostTable.tsx
+PostCard.tsx
+```
+
+Pages:
+
+```text
+index.tsx
+create.tsx
+edit.tsx
+show.tsx
+```
+
+Types:
+
+```text
+post.ts
+user.ts
+pagination.ts
+```
+
+---
+
+# 19. Recommended Module Example
+
+For a `posts` module:
+
+```text
+app/
+├── Http/
+│   ├── Controllers/
+│   │   └── PostController.php
+│   └── Requests/
+│       ├── PostStoreRequest.php
+│       └── PostUpdateRequest.php
+├── Services/
+│   └── PostService.php
+├── Repositories/
+│   ├── MediaHelperRepository.php
+│   └── MediaHelperRepositoryInterface.php
+├── Helpers/
+│   ├── MediaHelper.php
+│   └── UtilsHelper.php
+└── Providers/
+    └── RepositoryServiceProvider.php
+
+resources/js/
+├── modules/
+│   └── posts/
+│       ├── pages/
+│       │   ├── index.tsx
+│       │   ├── create.tsx
+│       │   ├── edit.tsx
+│       │   └── show.tsx
+│       ├── components/
+│       │   ├── PostForm.tsx
+│       │   └── PostTable.tsx
+│       └── types/
+│           └── post.ts
+└── shared/
+    ├── layouts/
+    │   └── AppLayout.tsx
+    ├── components/
+    │   └── Button.tsx
+    ├── types/
+    │   └── common.ts
+    └── utils/
+        └── formatDate.ts
+```
+
+---
+
+# 20. Controller Example
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\PostStoreRequest;
+use App\Http\Requests\PostUpdateRequest;
+use App\Services\PostService;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class PostController extends Controller
+{
+    public function __construct(
+        private PostService $postService,
+    ) {
+    }
+
+    public function index(): Response
+    {
+        $data = $this->postService->index();
+
+        return Inertia::render('posts/pages/index', [
+            'data' => $data,
+        ]);
+    }
+
+    public function create(): Response
+    {
+        $data = $this->postService->create();
+
+        return Inertia::render('posts/pages/create', [
+            'data' => $data,
+        ]);
+    }
+
+    public function store(PostStoreRequest $request)
+    {
+        $this->postService->store($request);
+
+        return redirect()
+            ->route('posts.index')
+            ->with('success', 'Post created successfully.');
+    }
+
+    public function edit(int $post): Response
+    {
+        $data = $this->postService->edit($post);
+
+        return Inertia::render('posts/pages/edit', [
+            'data' => $data,
+        ]);
+    }
+
+    public function update(PostUpdateRequest $request, int $post)
+    {
+        $this->postService->update($request, $post);
+
+        return redirect()
+            ->route('posts.index')
+            ->with('success', 'Post updated successfully.');
+    }
+
+    public function destroy(int $post)
+    {
+        $this->postService->destroy($post);
+
+        return redirect()
+            ->route('posts.index')
+            ->with('success', 'Post deleted successfully.');
+    }
+}
+```
+
+---
+
+# 21. Service Example
+
+```php
+<?php
+
+namespace App\Services;
+
+use App\Http\Requests\PostStoreRequest;
+use App\Http\Requests\PostUpdateRequest;
+use App\Repositories\MediaHelperRepositoryInterface;
+use App\Helpers\UtilsHelper;
+use App\Models\Post;
+
+class PostService
+{
+    public function __construct(
+        private MediaHelperRepositoryInterface $media_helper,
+    ) {
+    }
+
+    public function index(): array
+    {
+        return [
+            'posts' => Post::latest()->paginate(20),
+        ];
+    }
+
+    public function create(): array
+    {
+        return [];
+    }
+
+    public function store(PostStoreRequest $request): Post
+    {
+        $uploadedPath = null;
+
+        if ($request->hasFile('file')) {
+            $path = UtilsHelper::MonthYearWisePath();
+
+            $uploadedPath = $this->media_helper->upload(
+                $request->file('file'),
+                $path
+            );
+        }
+
+        return Post::create([
+            'title' => $request->validated('title'),
+            'content' => $request->validated('content'),
+            'image' => $uploadedPath,
+        ]);
+    }
+
+    public function edit(int $post): array
+    {
+        return [
+            'post' => Post::findOrFail($post),
+        ];
+    }
+
+    public function update(
+        PostUpdateRequest $request,
+        int $post
+    ): Post {
+        $model = Post::findOrFail($post);
+
+        $model->update([
+            'title' => $request->validated('title'),
+            'content' => $request->validated('content'),
+        ]);
+
+        if ($request->hasFile('file')) {
+            $path = UtilsHelper::MonthYearWisePath();
+
+            $uploadedPath = $this->media_helper->upload(
+                $request->file('file'),
+                $path
+            );
+
+            $model->update([
+                'image' => $uploadedPath,
+            ]);
+        }
+
+        return $model->refresh();
+    }
+
+    public function destroy(int $post): void
+    {
+        Post::findOrFail($post)->delete();
+    }
+}
+```
+
+---
+
+# 22. React Page Example
+
+File:
+
+```text
+resources/js/modules/posts/pages/index.tsx
+```
+
+```tsx
+import { Head, Link } from '@inertiajs/react';
+
+interface Post {
+    id: number;
+    title: string;
+}
+
+interface Props {
+    data: {
+        posts: {
+            data: Post[];
+        };
+    };
+}
+
+export default function Index({ data }: Props) {
+    return (
+        <>
+            <Head title="Posts" />
+
+            <div>
+                <div className="flex items-center justify-between">
+                    <h1>Posts</h1>
+
+                    <Link href={route('posts.create')}>
+                        Create Post
+                    </Link>
+                </div>
+
+                <div>
+                    {data.posts.data.map((post) => (
+                        <div key={post.id}>
+                            <h2>{post.title}</h2>
+
+                            <Link
+                                href={route('posts.edit', {
+                                    post: post.id,
+                                })}
+                            >
+                                Edit
+                            </Link>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </>
+    );
+}
+```
+
+---
+
+# 23. Important Rules
+
+## Backend
+
+- Keep Controllers thin.
+- Put business logic in Services.
+- Validate HTTP input using Laravel Request/Form Request.
+- Use dependency injection.
+- Use repository interfaces where repository abstraction is required.
+- Reuse the existing Media Helper architecture for image uploads.
+- Do not duplicate media-upload implementation across Services.
+- Return Inertia pages from Controllers for page requests.
+
+## Frontend
+
+- Organize pages/components/types by module.
+- Put reusable UI in `shared`.
+- Use TypeScript types for page props and API/page data.
+- Use `Link` from `@inertiajs/react` for navigation.
+- Use `useForm` for Inertia forms where appropriate.
+- Use Ziggy `route()` for Laravel route URLs.
+- Prefer named Laravel routes over hard-coded URLs.
+
+---
+
+# 24. Standard Feature Development Flow
+
+When adding a new feature:
+
+### Step 1 — Route
+
+Create named Laravel routes.
+
+```php
+Route::get('/posts', [PostController::class, 'index'])
+    ->name('posts.index');
+```
+
+### Step 2 — Request
+
+Create validation:
+
+```text
+app/Http/Requests/PostStoreRequest.php
+```
+
+### Step 3 — Service
+
+Create business logic:
+
+```text
+app/Services/PostService.php
+```
+
+### Step 4 — Controller
+
+Controller calls the Service and returns:
+
+```php
+return Inertia::render('posts/pages/index', [
+    'data' => $data,
+]);
+```
+
+### Step 5 — Page
+
+Create:
+
+```text
+resources/js/modules/posts/pages/index.tsx
+```
+
+### Step 6 — Components
+
+Create module-specific components:
+
+```text
+resources/js/modules/posts/components/
+```
+
+### Step 7 — Types
+
+Create:
+
+```text
+resources/js/modules/posts/types/
+```
+
+### Step 8 — Routes in React
+
+Use:
+
+```tsx
+route('posts.index')
+```
+
+instead of hard-coded URLs.
+
+---
+
+# 25. Final Architecture Principle
+
+The project should follow this responsibility model:
+
+```text
+Laravel Route
+      ↓
+Controller
+      ↓
+Request Validation
+      ↓
+Service
+      ↓
+Repository / Model / Helper
+      ↓
+Service Result
+      ↓
+Controller
+      ↓
+Inertia::render()
+      ↓
+Module Page
+      ↓
+Module Components
+      ↓
+Shared Components / Layouts
+```
+
+The primary rule is:
+
+```text
+Controller = HTTP + Validation + Response
+Service    = Business Logic
+Repository = Data/Infrastructure Access
+Helper     = Reusable Utility Logic
+Page       = Page-level React UI
+Component  = Reusable UI
+Types      = TypeScript Definitions
+Ziggy      = Laravel Route URLs in React
+```
+
+This structure should be followed consistently for new Laravel + Inertia.js + React features.

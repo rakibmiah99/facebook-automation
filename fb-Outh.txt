@@ -1,0 +1,61 @@
+Build a complete Laravel Facebook Login for Business integration for my SaaS application.
+
+Requirements:
+
+1. Create a dedicated service:
+   app/Services/Facebook/FacebookAuthService.php
+
+2. Create:
+   app/Http/Controllers/FacebookAuthController.php
+
+3. Add routes:
+   GET /facebook/connect
+   GET /facebook/callback
+
+4. Use Laravel HTTP Client (Illuminate\Support\Facades\Http) for all Meta Graph API requests.
+
+5. Store Facebook credentials in .env:
+   FACEBOOK_APP_ID
+   FACEBOOK_APP_SECRET
+   FACEBOOK_CONFIG_ID
+   FACEBOOK_REDIRECT_URI
+
+
+6. Add the corresponding configuration to config/services.php.
+
+7. My Meta App ID is:
+   4352884514965379
+
+8. My Facebook Login for Business Configuration ID is:
+   1009155328848762
+
+9. Implement the complete OAuth flow:
+   - Generate the Facebook Login authorization URL.
+   - Redirect the user to Facebook.
+   - Receive the OAuth callback.
+   - Validate state/CSRF securely.
+   - Exchange the authorization code for an access token.
+   - Retrieve the authenticated Facebook user's information.
+   - Retrieve the Pages available to that user.
+   - Retrieve the Page access token for the selected Page.
+   - Return useful API errors in a clean way.
+
+10. Keep ALL Facebook authentication/API logic inside FacebookAuthService.php.
+    The controller should remain thin and only handle HTTP requests/responses.
+
+11. Do NOT use Facebook SDK packages. Use Laravel's HTTP client directly.
+
+12. Do NOT hardcode the App Secret in source code.
+
+13. Add proper exception handling, logging, validation, and timeout handling.
+
+14. Use the current Meta Graph API version from configuration rather than hardcoding it in multiple places.
+
+15. Write clean production-quality Laravel code compatible with the current Laravel version.
+
+16. After implementing the code, show me: write a file fb_require.txt file there will write what i need to do.
+
+Important:
+This integration is for a SaaS where different customers will connect their own Facebook Pages. Design the service so the authenticated customer's Facebook/Page tokens can later be stored per user and used for Page posting and reading/managing comments.
+
+read my full project and add conenct button in app list page.
