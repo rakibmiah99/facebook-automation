@@ -9,12 +9,11 @@ use App\Http\Controllers\PostController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
-
+Route::get('/facebook/callback', [FacebookAuthController::class, 'callback'])->name('facebook.callback');
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 
     Route::get('/facebook/connect', [FacebookAuthController::class, 'connect'])->name('facebook.connect');
-    Route::get('/facebook/callback', [FacebookAuthController::class, 'callback'])->name('facebook.callback');
 
     Route::get('/facebook-apps', [FacebookAppController::class, 'index'])->name('facebook-apps.index');
     Route::post('/facebook-apps', [FacebookAppController::class, 'store'])->name('facebook-apps.store');
