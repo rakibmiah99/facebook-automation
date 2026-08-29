@@ -94,13 +94,19 @@ class TemplateRenderService
         $key = $field['key'] ?? null;
         $type = $field['type'] ?? 'text';
         $editable = (bool) ($field['editable'] ?? false);
+        $style = $field['style'] ?? [];
 
         if (! $key) {
             return;
         }
 
         if ($type === 'image') {
-            $this->applyImageField($canvas, $field, $editable && array_key_exists($key, $images) ? $images[$key] : null);
+            $this->applyImageField(
+                $canvas,
+                $style,
+                $field['default'] ?? null,
+                $editable && array_key_exists($key, $images) ? $images[$key] : null,
+            );
 
             return;
         }
@@ -113,21 +119,48 @@ class TemplateRenderService
             return;
         }
 
-        $x = (int) ($field['x'] ?? 0);
-        $y = (int) ($field['y'] ?? 0);
+        $this->applyTextField($canvas, $style, (string) $text);
+    }
 
-        $canvas->text((string) $text, $x, $y, function ($font) use ($field) {
-            $font->size((float) ($field['font_size'] ?? 32));
-            $font->color($field['color'] ?? '#000000');
-            $font->align($field['align'] ?? 'left', $this->resolveValign($field['valign'] ?? 'top'));
-            $font->filename($this->resolveFontPath($field));
+    /**
+     * Every position/size is read straight off the field's `style` object, which uses the
+     * same CSS property names (top, left, width, height, ...) the browser preview renders
+     * with — see resources/js/modules/templates/components/TemplatePreview.tsx. `top`/`left`
+     * are always the box's top-left corner (plain CSS `position: absolute` semantics), so
+     * `textAlign` is resolved into a GD anchor point ourselves rather than relying on GD's
+     * own anchor-based alignment.
+     *
+     * @param  array<string, mixed>  $style
+     */
+    private function applyTextField(ImageInterface $canvas, array $style, string $text): void
+    {
+        $left = (int) ($style['left'] ?? 0);
+        $top = (int) ($style['top'] ?? 0);
+        $width = (int) ($style['width'] ?? 0);
+        $height = (int) ($style['height'] ?? 0);
+        $padding = (int) ($style['padding'] ?? 0);
+        $align = in_array($style['textAlign'] ?? 'left', ['left', 'center', 'right'], true)
+            ? $style['textAlign']
+            : 'left';
 
-            if (! empty($field['width'])) {
-                $font->wrap((int) $field['width']);
-            }
+        $this->drawBox($canvas, $style, $left, $top, $width, $height);
 
-            if (! empty($field['line_height'])) {
-                $font->lineHeight((float) $field['line_height']);
+        $innerWidth = max(1, $width - 2 * $padding);
+        $anchorX = match ($align) {
+            'center' => $left + $padding + intdiv($innerWidth, 2),
+            'right' => $left + $width - $padding,
+            default => $left + $padding,
+        };
+
+        $canvas->text($text, $anchorX, $top + $padding, function ($font) use ($style, $align, $innerWidth) {
+            $font->size((float) ($style['fontSize'] ?? 32));
+            $font->color($style['color'] ?? '#000000');
+            $font->align($align, 'top');
+            $font->filename($this->resolveFontPath($style));
+            $font->wrap($innerWidth);
+
+            if (! empty($style['lineHeight'])) {
+                $font->lineHeight((float) $style['lineHeight']);
             }
         });
     }
@@ -138,10 +171,12 @@ class TemplateRenderService
      * font when no font is set — which is what made generated images look nothing
      * like the live preview. Bundled Inter matches the font the editor's live
      * preview already renders with (see resources/css/app.css --font-body).
+     *
+     * @param  array<string, mixed>  $style
      */
-    private function resolveFontPath(array $field): string
+    private function resolveFontPath(array $style): string
     {
-        $customPath = $field['font_path'] ?? null;
+        $customPath = $style['fontPath'] ?? null;
 
         if ($customPath && is_file($customPath)) {
             return $customPath;
@@ -151,38 +186,78 @@ class TemplateRenderService
     }
 
     /**
-     * The editor's valign option is 'middle' (matching the CSS vertical-align vocabulary
-     * template authors expect), but Intervention Image's Alignment enum only recognizes
-     * 'center' for that axis — passing 'middle' straight through throws.
+     * Draws the field's box background/border, if the style asks for either — mirrors the CSS
+     * `background-color`/`border` the browser preview applies to the same box.
+     *
+     * @param  array<string, mixed>  $style
      */
-    private function resolveValign(string $valign): string
+    private function drawBox(ImageInterface $canvas, array $style, int $x, int $y, int $width, int $height): void
     {
-        return $valign === 'middle' ? 'center' : $valign;
-    }
-
-    private function applyImageField(ImageInterface $canvas, array $field, ?UploadedFile $override): void
-    {
-        $width = (int) ($field['width'] ?? 0);
-        $height = (int) ($field['height'] ?? 0);
+        $backgroundColor = $style['backgroundColor'] ?? null;
+        $borderColor = $style['borderColor'] ?? null;
+        $borderWidth = (int) ($style['borderWidth'] ?? 0);
 
         if ($width <= 0 || $height <= 0) {
             return;
         }
 
+        if (! $backgroundColor && ! ($borderColor && $borderWidth > 0)) {
+            return;
+        }
+
+        $canvas->drawRectangle(function ($rectangle) use ($x, $y, $width, $height, $backgroundColor, $borderColor, $borderWidth) {
+            $rectangle->size($width, $height);
+            $rectangle->at($x, $y);
+
+            if ($backgroundColor) {
+                $rectangle->background($backgroundColor);
+            }
+
+            if ($borderColor && $borderWidth > 0) {
+                $rectangle->border($borderColor, $borderWidth);
+            }
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $style
+     */
+    private function applyImageField(ImageInterface $canvas, array $style, ?string $defaultPath, ?UploadedFile $override): void
+    {
+        $left = (int) ($style['left'] ?? 0);
+        $top = (int) ($style['top'] ?? 0);
+        $width = (int) ($style['width'] ?? 0);
+        $height = (int) ($style['height'] ?? 0);
+        $padding = (int) ($style['padding'] ?? 0);
+
+        if ($width <= 0 || $height <= 0) {
+            return;
+        }
+
+        $this->drawBox($canvas, $style, $left, $top, $width, $height);
+
         $source = null;
 
         if ($override) {
             $source = $this->manager->decodePath($override->getPathname());
-        } elseif (! empty($field['default']) && Storage::disk($this->mediaDisk())->exists($field['default'])) {
-            $source = $this->manager->decodeBinary(Storage::disk($this->mediaDisk())->get($field['default']));
+        } elseif ($defaultPath && Storage::disk($this->mediaDisk())->exists($defaultPath)) {
+            $source = $this->manager->decodeBinary(Storage::disk($this->mediaDisk())->get($defaultPath));
         }
 
         if (! $source) {
             return;
         }
 
-        $source->cover($width, $height);
-        $canvas->insert($source, (int) ($field['x'] ?? 0), (int) ($field['y'] ?? 0));
+        $innerWidth = max(1, $width - 2 * $padding);
+        $innerHeight = max(1, $height - 2 * $padding);
+
+        if (($style['objectFit'] ?? 'cover') === 'contain') {
+            $source->contain($innerWidth, $innerHeight);
+        } else {
+            $source->cover($innerWidth, $innerHeight);
+        }
+
+        $canvas->insert($source, $left + $padding, $top + $padding);
     }
 
     private function store(ImageInterface $canvas): string

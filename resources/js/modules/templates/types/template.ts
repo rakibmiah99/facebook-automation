@@ -1,19 +1,38 @@
+/**
+ * Field styling, expressed as plain CSS property names (camelCase, same vocabulary as a React
+ * `style` object) so it can be spread directly onto the preview's positioned box — see
+ * TemplatePreview.tsx — instead of hand-mapping a bespoke set of keys. The renderer
+ * (TemplateRenderService) reads this same object to draw the field server-side.
+ */
+export interface TemplateFieldStyle {
+    /** Top-left corner of the field's box, like CSS `position: absolute; top/left`. */
+    top: number;
+    left: number;
+    width: number;
+    /** Required for image fields; optional for text (only affects the background/border box). */
+    height?: number;
+    color?: string;
+    fontSize?: number;
+    textAlign?: 'left' | 'center' | 'right';
+    lineHeight?: number;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
+    /** Preview-only — the server renderer draws square corners. */
+    borderRadius?: number;
+    padding?: number;
+    /** Image fields only. */
+    objectFit?: 'cover' | 'contain';
+}
+
 export interface TemplateField {
     key: string;
     type: 'text' | 'image';
     label: string;
     default?: string | null;
     default_url?: string | null;
-    x: number;
-    y: number;
-    width: number;
-    height?: number;
-    font_size?: number;
-    color?: string;
-    align?: 'left' | 'center' | 'right';
-    valign?: 'top' | 'middle' | 'bottom';
-    line_height?: number;
     editable: boolean;
+    style: TemplateFieldStyle;
 }
 
 export interface TemplateBackground {

@@ -128,6 +128,11 @@ export default function AdminTemplateCreate({ data }: Props) {
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-muted)' }}>
                                 Config JSON (background + editable fields)
                             </label>
+                            <p className="text-xs mb-1.5" style={{ color: 'var(--color-muted)' }}>
+                                Each field's <code>style</code> uses plain CSS property names (top, left, width, height, color,
+                                fontSize, textAlign, lineHeight, backgroundColor, borderColor, borderWidth, borderRadius, padding,
+                                objectFit) — same vocabulary as a React style object.
+                            </p>
                             <textarea
                                 rows={12}
                                 value={form.data.config}
