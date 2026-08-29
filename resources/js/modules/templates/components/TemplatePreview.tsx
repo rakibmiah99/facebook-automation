@@ -7,6 +7,9 @@ interface TemplatePreviewProps {
     height: number;
     values: Record<string, string>;
     imagePreviews: Record<string, string>;
+    /** Admin design view only — end users never get hidden fields at all (the server strips them
+     *  out of the customize page's props), so this defaults to hiding them here too. */
+    revealHidden?: boolean;
 }
 
 // Matches Intervention Image's Font default (see vendor/intervention/image/src/Typography/Font.php)
@@ -40,7 +43,7 @@ function scaledStyle(style: TemplateFieldStyle, scale: number): React.CSSPropert
  * produces server-side with Intervention Image. Deliberately CSS-based rather than a canvas
  * library, per the project guide's "no unnecessary canvas framework" direction.
  */
-export default function TemplatePreview({ config, width, height, values, imagePreviews }: TemplatePreviewProps) {
+export default function TemplatePreview({ config, width, height, values, imagePreviews, revealHidden = false }: TemplatePreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
 
@@ -77,7 +80,23 @@ export default function TemplatePreview({ config, width, height, values, imagePr
             )}
 
             {config.fields?.map((field) => {
+                if (field.hidden && !revealHidden) {
+                    return null;
+                }
+
                 const style = scaledStyle(field.style, scale);
+                const hiddenOutline: React.CSSProperties = field.hidden
+                    ? { outline: '1px dashed var(--color-warning)', outlineOffset: 2 }
+                    : {};
+
+                const hiddenBadge = field.hidden && (
+                    <span
+                        className="absolute -top-4 left-0 text-[9px] font-semibold uppercase tracking-wide px-1 rounded whitespace-nowrap"
+                        style={{ background: 'var(--color-warning)', color: '#111' }}
+                    >
+                        Hidden
+                    </span>
+                );
 
                 if (field.type === 'image') {
                     const src = imagePreviews[field.key] ?? field.default_url ?? undefined;
@@ -86,8 +105,9 @@ export default function TemplatePreview({ config, width, height, values, imagePr
                         <div
                             key={field.key}
                             className="absolute overflow-hidden box-border"
-                            style={{ ...style, background: field.style.backgroundColor ?? 'rgba(0,0,0,0.05)' }}
+                            style={{ ...style, ...hiddenOutline, background: field.style.backgroundColor ?? 'rgba(0,0,0,0.05)' }}
                         >
+                            {hiddenBadge}
                             {src && (
                                 <img
                                     src={src}
@@ -110,8 +130,10 @@ export default function TemplatePreview({ config, width, height, values, imagePr
                             fontFamily: "'Template Render Font', Inter, sans-serif",
                             lineHeight: DEFAULT_LINE_HEIGHT,
                             ...style,
+                            ...hiddenOutline,
                         }}
                     >
+                        {hiddenBadge}
                         {text}
                     </div>
                 );

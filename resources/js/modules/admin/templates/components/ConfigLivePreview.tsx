@@ -17,7 +17,7 @@ export default function ConfigLivePreview({ config, error, width, height }: Conf
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                 {config ? (
-                    <TemplatePreview config={config} width={width || 1} height={height || 1} values={{}} imagePreviews={{}} />
+                    <TemplatePreview config={config} width={width || 1} height={height || 1} values={{}} imagePreviews={{}} revealHidden />
                 ) : (
                     <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
                         Start typing valid JSON to see a preview.
@@ -32,7 +32,9 @@ export default function ConfigLivePreview({ config, error, width, height }: Conf
             )}
 
             <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                Uses each field's default value/color/position — exactly what a user sees before customizing.
+                Uses each field's default value/color/position — exactly what a user sees before customizing. Fields
+                outlined in orange are marked <strong>hidden</strong> — end users won't see or edit them, but they still
+                render in generated images.
             </p>
         </div>
     );

@@ -4,6 +4,7 @@ import AppLayout from '../../../../shared/layouts/AppLayout';
 import type { TemplateConfig, TemplateItem } from '../../../templates/types/template';
 import { ASPECT_RATIO_OPTIONS } from '../../../template-requests/types/template-request';
 import ConfigLivePreview from '../components/ConfigLivePreview';
+import TemplateJsonGuidelineModal from '../components/TemplateJsonGuidelineModal';
 import { useConfigPreview } from '../hooks/useConfigPreview';
 import { AdminTemplateFormData, AdminUserOption } from '../types/admin-template';
 
@@ -132,14 +133,12 @@ export default function AdminTemplateEdit({ data }: Props) {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-muted)' }}>
-                                Config JSON (background + editable fields)
-                            </label>
-                            <p className="text-xs mb-1.5" style={{ color: 'var(--color-muted)' }}>
-                                Each field's <code>style</code> uses plain CSS property names (top, left, width, height, color,
-                                fontSize, textAlign, lineHeight, backgroundColor, borderColor, borderWidth, borderRadius, padding,
-                                objectFit) — same vocabulary as a React style object.
-                            </p>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-xs font-medium" style={{ color: 'var(--color-muted)' }}>
+                                    Config JSON (background + editable fields)
+                                </label>
+                                <TemplateJsonGuidelineModal />
+                            </div>
                             <textarea
                                 rows={14}
                                 value={form.data.config}
