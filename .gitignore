@@ -35,4 +35,5 @@ public/.user.ini
 pnpm-lock.yaml
 package-lock.json
 storage/logs/laravel.log
-/abc
+composer.lock
+.env
