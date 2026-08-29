@@ -1,16 +1,13 @@
 # Template Config JSON Guideline
 
-Every template is driven by one JSON object stored in its `config` column: a **background** plus
-a list of **fields**. Each field's `style` uses plain CSS property names (the same vocabulary as a
-React `style` object), so what you write here is what both the live preview and the final
-generated image use to position and draw it.
+Every template is driven by one JSON object stored in its `config` column: a **background** plus a list of **fields**. Each field's `style` uses plain CSS property names (the same vocabulary as a React `style` object), so what you write here is what both the live preview and the final generated image use to position and draw it.
 
 ## Top-level shape
 
 ```json
 {
   "background": { "type": "color", "value": "#111827", "editable": false },
-  "fields": [ ]
+  "fields": []
 }
 ```
 
@@ -41,7 +38,7 @@ Each field:
   "default": "Breaking News",
   "editable": true,
   "hidden": false,
-  "style": { }
+  "style": {}
 }
 ```
 
@@ -57,30 +54,27 @@ A field can be both `hidden: true` and `editable: true` if you want an admin-onl
 
 ## Field style (CSS properties)
 
-`style` positions and styles the field. Every key is a real CSS property name (camelCase), and the
-generated image is rendered to match: plain numbers are pixels in the template's actual
-`width`/`height` space (the preview just scales them down to fit the screen); `"N%"` strings
-resolve against the canvas size; `"Npx"` strings work the same as a plain number.
+`style` positions and styles the field. Every key is a real CSS property name (camelCase), and the generated image is rendered to match: plain numbers are pixels in the template's actual `width`/`height` space (the preview just scales them down to fit the screen); `"N%"` strings resolve against the canvas size; `"Npx"` strings work the same as a plain number.
 
-| Property          | Applies to    | Notes |
-|--------------------|---------------|-------|
-| `top` / `left`     | text, image   | Y/X position of the box's top-left edge. Plain number, `"N%"`, or `"Npx"`. |
-| `right` / `bottom` | text, image   | Position from the opposite edge instead of `top`/`left` — e.g. `bottom: 0` pins a field to the canvas's bottom edge. If both `left` and `right` (or `top` and `bottom`) are set, the box's `width`/`height` is derived from the gap between them. |
-| `width` / `height` | text, image   | Box size. **Required for image fields** (text wraps within `width`; `height` on text only affects the background/border box, not wrapping). If omitted and not derivable from opposing edges, a field shrinks to fit its own content (like an unset CSS `width`/`height`) — used for e.g. a corner watermark anchored only by `right`/`bottom`. |
-| `color`            | text          | Text color, hex (e.g. `"#ffffff"`). |
-| `fontSize`         | text          | Font size — plain number or `"Npx"`. |
-| `textAlign`        | text          | `"left"`, `"center"`, or `"right"`. Ignored on a field with `display: "flex"` in favor of `justifyContent`. |
-| `display`          | text          | Set to `"flex"` to align content using `alignItems`/`justifyContent` instead of `textAlign`'s always-top-anchored default. |
-| `alignItems`       | text (flex only) | Vertical alignment within the box: `"flex-start"`/`"top"`, `"center"`, or `"flex-end"`/`"bottom"`. |
-| `justifyContent`   | text (flex only) | Horizontal alignment within the box: `"flex-start"`/`"left"`, `"center"`, or `"flex-end"`/`"right"`. |
-| `lineHeight`       | text          | Line height multiplier (e.g. `1.25`). |
-| `backgroundColor`  | text, image   | Fills the field's box behind the text/image. |
-| `backgroundImage`  | text, image   | CSS `url('path')` syntax, e.g. `"url('templates/2026/08/bg-abc123.webp')"`. Same path rules as background/default image — must already be a valid storage path (or a full `https://` URL). Drawn cover-fit behind the text/image, on top of `backgroundColor`. |
-| `borderColor`      | text, image   | Box border color — needs `borderWidth` to actually show. |
-| `borderWidth`      | text, image   | Border thickness — plain number or `"Npx"`. |
-| `borderRadius`     | text, image   | Rounds the box corners **in the preview only** — the generated image always has square corners. |
-| `padding`          | text, image   | Inset between the box edge and the text/image content — plain number or `"Npx"`. |
-| `objectFit`        | image         | `"cover"` (crop to fill, default) or `"contain"` (fit inside, may letterbox). |
+| Property           | Applies to       | Notes                                                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `top` / `left`     | text, image      | Y/X position of the box's top-left edge. Plain number, `"N%"`, or `"Npx"`.                                                                                                                                                                                                                                                                      |
+| `right` / `bottom` | text, image      | Position from the opposite edge instead of `top`/`left` — e.g. `bottom: 0` pins a field to the canvas's bottom edge. If both `left` and `right` (or `top` and `bottom`) are set, the box's `width`/`height` is derived from the gap between them.                                                                                               |
+| `width` / `height` | text, image      | Box size. **Required for image fields** (text wraps within `width`; `height` on text only affects the background/border box, not wrapping). If omitted and not derivable from opposing edges, a field shrinks to fit its own content (like an unset CSS `width`/`height`) — used for e.g. a corner watermark anchored only by `right`/`bottom`. |
+| `color`            | text             | Text color, hex (e.g. `"#ffffff"`).                                                                                                                                                                                                                                                                                                             |
+| `fontSize`         | text             | Font size — plain number or `"Npx"`.                                                                                                                                                                                                                                                                                                            |
+| `textAlign`        | text             | `"left"`, `"center"`, or `"right"`. Ignored on a field with `display: "flex"` in favor of `justifyContent`.                                                                                                                                                                                                                                     |
+| `display`          | text             | Set to `"flex"` to align content using `alignItems`/`justifyContent` instead of `textAlign`'s always-top-anchored default.                                                                                                                                                                                                                      |
+| `alignItems`       | text (flex only) | Vertical alignment within the box: `"flex-start"`/`"top"`, `"center"`, or `"flex-end"`/`"bottom"`.                                                                                                                                                                                                                                              |
+| `justifyContent`   | text (flex only) | Horizontal alignment within the box: `"flex-start"`/`"left"`, `"center"`, or `"flex-end"`/`"right"`.                                                                                                                                                                                                                                            |
+| `lineHeight`       | text             | Line height multiplier (e.g. `1.25`).                                                                                                                                                                                                                                                                                                           |
+| `backgroundColor`  | text, image      | Fills the field's box behind the text/image.                                                                                                                                                                                                                                                                                                    |
+| `backgroundImage`  | text, image      | CSS `url('path')` syntax, e.g. `"url('templates/2026/08/bg-abc123.webp')"`. Same path rules as background/default image — must already be a valid storage path (or a full `https://` URL). Drawn cover-fit behind the text/image, on top of `backgroundColor`.                                                                                  |
+| `borderColor`      | text, image      | Box border color — needs `borderWidth` to actually show.                                                                                                                                                                                                                                                                                        |
+| `borderWidth`      | text, image      | Border thickness — plain number or `"Npx"`.                                                                                                                                                                                                                                                                                                     |
+| `borderRadius`     | text, image      | Rounds the box corners **in the preview only** — the generated image always has square corners.                                                                                                                                                                                                                                                 |
+| `padding`          | text, image      | Inset between the box edge and the text/image content — plain number or `"Npx"`.                                                                                                                                                                                                                                                                |
+| `objectFit`        | image            | `"cover"` (crop to fill, default) or `"contain"` (fit inside, may letterbox).                                                                                                                                                                                                                                                                   |
 
 Text example:
 
@@ -104,9 +98,7 @@ Text example:
 }
 ```
 
-Image example, with a background box and border. `default` is set to a real storage path here — a
-fixed logo shown until the end user (if `editable: true`) uploads their own; use `null` instead if
-the field should start with no image at all:
+Image example, with a background box and border. `default` is set to a real storage path here — a fixed logo shown until the end user (if `editable: true`) uploads their own; use `null` instead if the field should start with no image at all:
 
 ```json
 {
