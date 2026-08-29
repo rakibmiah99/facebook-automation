@@ -11,6 +11,8 @@ use App\Models\PostComment;
 use App\Models\PostContent;
 use App\Repositories\FacebookRepositoryInterface;
 use App\Repositories\MediaHelperRepositoryInterface;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
 
@@ -119,6 +121,41 @@ class PostService
 
         $path = UtilsHelper::MonthYearWisePath('posts');
         $contentPath = $this->mediaHelper->upload($request->file('image'), $path);
+
+        return $this->createFromContentPath(
+            accounts: $accounts,
+            contentPath: $contentPath,
+            caption: $caption,
+            isScheduled: $isScheduled,
+            scheduledAt: $scheduledAt,
+            addComment: $addComment,
+            commentMessage: $commentMessage,
+            commentAttachmentPath: $commentAttachmentPath,
+            commentAttachmentUrl: $commentAttachmentUrl,
+        );
+    }
+
+    /**
+     * Create one image Post (+ content, optional comment) per Facebook account from a path
+     * that has already been uploaded through the Media Helper. This is the single place that
+     * fans out to the Facebook image-publish pipeline, shared by direct image-post uploads
+     * (storeImage) and template-generated images, so both behave identically end to end.
+     *
+     * @param  Collection<int, FacebookAppAccount>  $accounts
+     */
+    public function createFromContentPath(
+        Collection $accounts,
+        string $contentPath,
+        ?string $caption,
+        bool $isScheduled,
+        ?string $scheduledAt,
+        bool $addComment = false,
+        ?string $commentMessage = null,
+        ?string $commentAttachmentPath = null,
+        ?string $commentAttachmentUrl = null,
+        ?int $templateId = null,
+        ?int $templateGenerationId = null,
+    ): array {
         $imageUrl = UtilsHelper::GetMediaUrl($contentPath);
 
         $summary = ['total' => 0, 'published' => 0, 'failed' => 0, 'scheduled' => 0];
@@ -149,6 +186,8 @@ class PostService
             $post = Post::create([
                 'facebook_app_account_id' => $account->id,
                 'user_id' => Auth::id(),
+                'template_id' => $templateId,
+                'template_generation_id' => $templateGenerationId,
                 'post_id' => $postId,
                 'is_published' => $isPublished,
                 'is_scheduled' => $isScheduled,
@@ -224,7 +263,7 @@ class PostService
      *
      * @return array{0: bool, 1: ?string, 2: ?string, 3: ?string} [addComment, message, attachmentPath, attachmentUrl]
      */
-    private function prepareComment(PostStoreRequest|PostImageStoreRequest $request): array
+    private function prepareComment(FormRequest $request): array
     {
         $addComment = $request->boolean('add_comment');
 

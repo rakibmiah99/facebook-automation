@@ -23,12 +23,12 @@ export default defineConfig({
         inertia(),
     ],
     server: {
-        host: '0.0.0.0',
-        port: 5173,
-        hmr: {
-            host: 'sons-accessibility-crowd-lawn.trycloudflare.com',
-            protocol: 'wss',
-        },
+        // host: '0.0.0.0',
+        // port: 5173,
+        // hmr: {
+        //     host: 'sons-accessibility-crowd-lawn.trycloudflare.com',
+        //     protocol: 'wss',
+        // },
         watch: {
             ignored: [
                 '**/storage/framework/views/**',

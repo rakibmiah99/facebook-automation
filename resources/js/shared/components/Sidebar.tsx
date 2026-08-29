@@ -1,7 +1,26 @@
-import { Link, router } from '@inertiajs/react';
-import { BarChart3, CheckSquare, ChevronDown, ChevronLeft, Facebook, FileText, FolderKanban, Image, LayoutGrid, List, Send, Settings, Type, Users } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import {
+    BarChart3,
+    CheckSquare,
+    ChevronDown,
+    ChevronLeft,
+    ClipboardList,
+    Facebook,
+    FileText,
+    FolderKanban,
+    Image,
+    LayoutGrid,
+    LayoutTemplate,
+    List,
+    Send,
+    Settings,
+    ShieldCheck,
+    Type,
+    Users,
+} from 'lucide-react';
 import { useState, type ComponentType } from 'react';
 import { route } from 'ziggy-js';
+import type { SharedPageProps } from '../types/shared';
 
 interface SidebarProps {
     collapsed: boolean;
@@ -23,36 +42,66 @@ interface NavItem {
     children?: ChildNavItem[];
 }
 
-const navItems: { group: string; items: NavItem[] }[] = [
-    {
-        group: 'Main',
-        items: [
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, routeName: 'dashboard.index' },
-            { id: 'facebook-apps', label: 'My Apps', icon: Facebook, routeName: 'facebook-apps.index' },
-            {
-                id: 'post',
-                label: 'Post',
-                icon: Send,
-                children: [
-                    { id: 'post-text', label: 'Text', icon: Type, routeName: 'posts.text' },
-                    { id: 'post-image', label: 'Image', icon: Image, routeName: 'posts.image' },
-                    { id: 'post-list', label: 'Post List', icon: List, routeName: 'posts.index' },
-                ],
-            },
-            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            { id: 'projects', label: 'Projects', icon: FolderKanban },
-            { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-            { id: 'reports', label: 'Reports', icon: FileText },
-        ],
-    },
-    {
-        group: 'Manage',
-        items: [
-            { id: 'team', label: 'Team', icon: Users },
-            { id: 'settings', label: 'Settings', icon: Settings },
-        ],
-    },
-];
+function buildNavItems(isAdmin: boolean): { group: string; items: NavItem[] }[] {
+    const groups: { group: string; items: NavItem[] }[] = [
+        {
+            group: 'Main',
+            items: [
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, routeName: 'dashboard.index' },
+                { id: 'facebook-apps', label: 'My Apps', icon: Facebook, routeName: 'facebook-apps.index' },
+                {
+                    id: 'post',
+                    label: 'Post',
+                    icon: Send,
+                    children: [
+                        { id: 'post-text', label: 'Text', icon: Type, routeName: 'posts.text' },
+                        { id: 'post-image', label: 'Image', icon: Image, routeName: 'posts.image' },
+                        { id: 'post-list', label: 'Post List', icon: List, routeName: 'posts.index' },
+                    ],
+                },
+                {
+                    id: 'customization',
+                    label: 'Customization',
+                    icon: LayoutTemplate,
+                    children: [
+                        { id: 'customization-templates', label: 'Templates', icon: LayoutTemplate, routeName: 'templates.index' },
+                        { id: 'customization-requests', label: 'Custom Template Requests', icon: ClipboardList, routeName: 'template-requests.index' },
+                    ],
+                },
+                { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+                { id: 'projects', label: 'Projects', icon: FolderKanban },
+                { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+                { id: 'reports', label: 'Reports', icon: FileText },
+            ],
+        },
+        {
+            group: 'Manage',
+            items: [
+                { id: 'team', label: 'Team', icon: Users },
+                { id: 'settings', label: 'Settings', icon: Settings },
+            ],
+        },
+    ];
+
+    if (isAdmin) {
+        groups.push({
+            group: 'Admin',
+            items: [
+                {
+                    id: 'admin',
+                    label: 'Customization Admin',
+                    icon: ShieldCheck,
+                    children: [
+                        { id: 'admin-templates', label: 'Manage Templates', icon: LayoutTemplate, routeName: 'admin.templates.index' },
+                        { id: 'admin-requests', label: 'Template Requests', icon: ClipboardList, routeName: 'admin.template-requests.index' },
+                    ],
+                },
+            ],
+        });
+    }
+
+    return groups;
+}
 
 function isChildActive(item: NavItem): boolean {
     return item.children?.some((child) => child.routeName && route().current(child.routeName)) ?? false;
@@ -60,6 +109,8 @@ function isChildActive(item: NavItem): boolean {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const { auth } = usePage<SharedPageProps>().props;
+    const navItems = buildNavItems(Boolean(auth.user?.is_admin));
 
     return (
         <aside
