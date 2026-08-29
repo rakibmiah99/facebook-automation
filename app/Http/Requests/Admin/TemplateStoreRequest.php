@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Rules\ValidTemplateConfigRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +22,7 @@ class TemplateStoreRequest extends FormRequest
             'width' => ['required', 'integer', 'min:1', 'max:8000'],
             'height' => ['required', 'integer', 'min:1', 'max:8000'],
             'preview' => ['nullable', 'image', 'max:8192'],
-            'config' => ['required', 'json'],
+            'config' => ['required', 'json', new ValidTemplateConfigRule()],
             'is_common' => ['nullable', 'boolean'],
             'is_premium' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],

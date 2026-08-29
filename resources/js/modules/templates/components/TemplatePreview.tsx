@@ -7,8 +7,9 @@ interface TemplatePreviewProps {
     height: number;
     values: Record<string, string>;
     imagePreviews: Record<string, string>;
-    /** Admin design view only — end users never get hidden fields at all (the server strips them
-     *  out of the customize page's props), so this defaults to hiding them here too. */
+    /** Hidden fields always render here (they're drawn into the final generated image too, so the
+     *  preview needs to show them to actually match). This only toggles the admin-only dashed
+     *  outline/"Hidden" badge used to annotate them while designing — never shown to end users. */
     revealHidden?: boolean;
 }
 
@@ -80,16 +81,12 @@ export default function TemplatePreview({ config, width, height, values, imagePr
             )}
 
             {config.fields?.map((field) => {
-                if (field.hidden && !revealHidden) {
-                    return null;
-                }
-
                 const style = scaledStyle(field.style, scale);
-                const hiddenOutline: React.CSSProperties = field.hidden
+                const hiddenOutline: React.CSSProperties = field.hidden && revealHidden
                     ? { outline: '1px dashed var(--color-warning)', outlineOffset: 2 }
                     : {};
 
-                const hiddenBadge = field.hidden && (
+                const hiddenBadge = field.hidden && revealHidden && (
                     <span
                         className="absolute -top-4 left-0 text-[9px] font-semibold uppercase tracking-wide px-1 rounded whitespace-nowrap"
                         style={{ background: 'var(--color-warning)', color: '#111' }}

@@ -55,7 +55,7 @@ export default function AdminTemplateEdit({ data }: Props) {
                         <img src={template.preview_url} alt={template.name} className="rounded-xl max-h-48 object-contain" />
                     )}
 
-                    <div className="grid gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 340px)' }}>
+                    <div className="space-y-6">
                     <form
                         onSubmit={submit}
                         className="rounded-2xl p-6 space-y-5 h-fit"

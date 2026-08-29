@@ -150,7 +150,7 @@ export default function TemplateEdit({ data }: Props) {
 
     const generateErrors = generateForm.errors as Record<string, string>;
     const accountOptions = accounts.map((a) => ({ value: String(a.id), label: a.account_name }));
-    const editableFields = fields.filter((f) => f.editable);
+    const editableFields = fields.filter((f) => f.editable && !f.hidden);
 
     return (
         <AppLayout>

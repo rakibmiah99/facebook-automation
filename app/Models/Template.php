@@ -89,6 +89,13 @@ class Template extends Model
             if (($field['type'] ?? null) === 'image' && ! empty($field['default'])) {
                 $config['fields'][$i]['default_url'] = UtilsHelper::GetMediaUrl($field['default']);
             }
+
+            $backgroundImagePath = UtilsHelper::ExtractCssUrl($field['style']['backgroundImage'] ?? null);
+            $backgroundImageUrl = $backgroundImagePath ? UtilsHelper::GetMediaUrl($backgroundImagePath) : null;
+
+            if ($backgroundImageUrl) {
+                $config['fields'][$i]['style']['backgroundImage'] = "url('{$backgroundImageUrl}')";
+            }
         }
 
         return $config;

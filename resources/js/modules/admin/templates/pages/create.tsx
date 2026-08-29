@@ -33,7 +33,7 @@ export default function AdminTemplateCreate({ data }: Props) {
         custom_template_request_id: query.get('custom_template_request_id') ?? '',
     });
 
-    const submit = (e: React.FormEvent) => {
+    const submit = (e: React.SubmitEvent<HTMLFormElement>) => {
         e.preventDefault();
         form.post(route('admin.templates.store'), { forceFormData: true });
     };
@@ -50,7 +50,7 @@ export default function AdminTemplateCreate({ data }: Props) {
                         New Template
                     </h1>
 
-                    <div className="grid gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 340px)' }}>
+                    <div className="space-y-6">
                     <form
                         onSubmit={submit}
                         className="rounded-2xl p-6 space-y-5 h-fit"
