@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, MoonStar, Search, Sun } from 'lucide-react';
+import { Bell, ChevronDown, Menu, MoonStar, Search, Sun } from 'lucide-react';
 import { useState } from 'react';
 import type { User } from '../types/user';
 
@@ -6,6 +6,7 @@ interface NavbarProps {
     user: User;
     onLogout: () => void;
     onOpenSearch?: () => void;
+    onOpenSidebar?: () => void;
     isDark: boolean;
     onToggleTheme: () => void;
 }
@@ -17,7 +18,7 @@ const notifications = [
     { id: 4, text: 'Budget threshold reached: Q4 Marketing', time: '3h ago', unread: false },
 ];
 
-export default function Navbar({ user, onLogout, onOpenSearch, isDark, onToggleTheme }: NavbarProps) {
+export default function Navbar({ user, onLogout, onOpenSearch, onOpenSidebar, isDark, onToggleTheme }: NavbarProps) {
     const [notifOpen, setNotifOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
 
@@ -30,6 +31,14 @@ export default function Navbar({ user, onLogout, onOpenSearch, isDark, onToggleT
         >
             {/* Search — opens command palette */}
             <div className="flex items-center gap-2 flex-1 max-w-xs">
+                <button
+                    onClick={onOpenSidebar}
+                    className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0"
+                    style={{ color: 'var(--color-muted)' }}
+                    aria-label="Open menu"
+                >
+                    <Menu size={18} />
+                </button>
                 <button
                     onClick={onOpenSearch}
                     className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg transition-all duration-150 text-left"

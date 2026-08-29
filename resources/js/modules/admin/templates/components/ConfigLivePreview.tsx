@@ -17,13 +17,10 @@ export default function ConfigLivePreview({ config, error, width, height }: Conf
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                 {config ? (
-                    // Capped at the template's actual pixel width so the preview renders true-to-size
-                    // (like the end-user customize page) instead of stretching to fill this section —
-                    // it still shrinks further on narrower screens since TemplatePreview scales to
-                    // whatever width this wrapper ends up with.
-                    <div style={{ maxWidth: width ? `${width}px` : undefined, marginInline: 'auto' }}>
-                        <TemplatePreview config={config} width={width || 1} height={height || 1} values={{}} imagePreviews={{}} revealHidden />
-                    </div>
+                    // Same as the customize page's preview (templates/pages/edit.tsx): fills whatever
+                    // width this column gives it and lets TemplatePreview's own ResizeObserver scale
+                    // the design down to fit — no artificial size cap here, just a wide column.
+                    <TemplatePreview config={config} width={width || 1} height={height || 1} values={{}} imagePreviews={{}} revealHidden />
                 ) : (
                     <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
                         Start typing valid JSON to see a preview.

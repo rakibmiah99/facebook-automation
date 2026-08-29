@@ -25,6 +25,10 @@ import type { SharedPageProps } from '../types/shared';
 interface SidebarProps {
     collapsed: boolean;
     onToggle: () => void;
+    /** Below the `lg` breakpoint the sidebar becomes an off-canvas drawer instead of pushing
+     *  content — `mobileOpen` controls whether it's slid into view. */
+    mobileOpen: boolean;
+    onCloseMobile: () => void;
 }
 
 interface ChildNavItem {
@@ -107,20 +111,26 @@ function isChildActive(item: NavItem): boolean {
     return item.children?.some((child) => child.routeName && route().current(child.routeName)) ?? false;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const { auth } = usePage<SharedPageProps>().props;
     const navItems = buildNavItems(Boolean(auth.user?.is_admin));
 
     return (
-        <aside
-            className="flex flex-col h-full transition-all duration-300 ease-in-out flex-shrink-0"
-            style={{
-                width: collapsed ? '64px' : '220px',
-                background: 'var(--color-surface)',
-                borderRight: '1px solid var(--color-border)',
-            }}
-        >
+        <>
+            {/* Backdrop — mobile only, closes the drawer on tap outside it */}
+            {mobileOpen && <div className="fixed inset-0 z-30 lg:hidden" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onCloseMobile} />}
+
+            <aside
+                className={`flex flex-col h-full transition-all duration-300 ease-in-out flex-shrink-0 fixed lg:static inset-y-0 left-0 z-40 ${
+                    mobileOpen ? 'translate-x-0' : '-translate-x-full'
+                } lg:translate-x-0`}
+                style={{
+                    width: collapsed ? '64px' : '220px',
+                    background: 'var(--color-surface)',
+                    borderRight: '1px solid var(--color-border)',
+                }}
+            >
             {/* Logo */}
             <div className="flex items-center gap-3 px-4 flex-shrink-0" style={{ height: '60px', borderBottom: '1px solid var(--color-border)' }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--color-primary)' }}>
@@ -324,8 +334,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 ))}
             </nav>
 
-            {/* Collapse toggle */}
-            <div style={{ borderTop: '1px solid var(--color-border)' }} className="p-2">
+            {/* Collapse toggle — desktop only; an off-canvas mobile drawer has no use for an
+                icons-only collapsed state, it just closes via the backdrop instead. */}
+            <div style={{ borderTop: '1px solid var(--color-border)' }} className="p-2 hidden lg:block">
                 <button
                     onClick={onToggle}
                     className="flex items-center justify-center w-full py-2 rounded-lg transition-colors duration-150"
@@ -342,6 +353,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <ChevronLeft size={16} style={{ transform: collapsed ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
                 </button>
             </div>
-        </aside>
+            </aside>
+        </>
     );
 }

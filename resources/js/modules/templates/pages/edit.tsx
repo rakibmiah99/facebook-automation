@@ -184,7 +184,7 @@ export default function TemplateEdit({ data }: Props) {
                     </div>
 
                     {step === 1 && (
-                        <div className="grid gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 380px)' }}>
+                        <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
                             <div className="space-y-4">
                                 <div className="rounded-2xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                                     <TemplatePreview
@@ -269,7 +269,7 @@ export default function TemplateEdit({ data }: Props) {
                     )}
 
                     {step === 2 && selectedGeneration && (
-                        <div className="grid gap-6" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 380px)' }}>
+                        <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
                             <div className="space-y-3">
                                 <div
                                     className="rounded-2xl p-4 flex items-center justify-center"

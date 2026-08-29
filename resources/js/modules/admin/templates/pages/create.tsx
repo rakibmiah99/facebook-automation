@@ -50,7 +50,7 @@ export default function AdminTemplateCreate({ data }: Props) {
                         New Template
                     </h1>
 
-                    <div className="space-y-6">
+                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
                     <form
                         onSubmit={submit}
                         className="rounded-2xl p-6 space-y-5 h-fit"

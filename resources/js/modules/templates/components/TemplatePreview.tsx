@@ -18,8 +18,37 @@ interface TemplatePreviewProps {
 const DEFAULT_LINE_HEIGHT = 1.25;
 
 // Pixel-based style properties that need to be scaled down to the container's rendered size —
-// the config itself is always authored in the template's real pixel dimensions.
-const SCALED_KEYS = ['top', 'left', 'width', 'height', 'fontSize', 'borderWidth', 'borderRadius', 'padding'] as const;
+// the config itself is always authored in the template's real pixel dimensions. Matches the set
+// TemplateRenderService.php treats as lengths server-side (resolveBox/drawBox).
+const SCALED_KEYS = ['top', 'left', 'right', 'bottom', 'width', 'height', 'fontSize', 'borderWidth', 'borderRadius', 'padding'] as const;
+
+/**
+ * Resolves one length value the same way TemplateRenderService's resolveLength() does server-side:
+ * a plain number or a "*px" string is template-pixel-space and needs scaling down to the preview's
+ * rendered size; a "*%" string is already relative to the (correctly-sized) container, so the
+ * browser resolves it for free and it's left untouched.
+ */
+function scaledLength(value: unknown, scale: number): unknown {
+    if (typeof value === 'number') {
+        return value * scale;
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+
+        if (trimmed.endsWith('%')) {
+            return trimmed;
+        }
+
+        const numeric = parseFloat(trimmed);
+
+        if (!Number.isNaN(numeric)) {
+            return numeric * scale;
+        }
+    }
+
+    return value;
+}
 
 /**
  * Scales a field's style to the preview container while keeping it a plain CSS object — every
@@ -30,8 +59,8 @@ function scaledStyle(style: TemplateFieldStyle, scale: number): React.CSSPropert
     const result: Record<string, unknown> = { ...style };
 
     for (const key of SCALED_KEYS) {
-        if (typeof result[key] === 'number') {
-            result[key] = (result[key] as number) * scale;
+        if (result[key] !== undefined) {
+            result[key] = scaledLength(result[key], scale);
         }
     }
 

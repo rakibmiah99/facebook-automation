@@ -23,6 +23,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const { auth, flash } = usePage<SharedPageProps>().props;
     const { toast } = useToast();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [cmdOpen, setCmdOpen] = useState(false);
     const [isDark, setIsDark] = useState(() => getStoredTheme() === 'dark');
 
@@ -44,7 +45,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     // equal to their previous value.
     useEffect(() => {
         return router.on('success', (event) => {
-            const flash = (event.detail.page.props as SharedPageProps).flash;
+            const flash = (event.detail.page.props as unknown as SharedPageProps).flash;
             const message = flash?.success ?? flash?.error;
 
             if (message) {
@@ -52,6 +53,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
             }
         });
     }, [toast]);
+
+    // Close the mobile drawer after any navigation, so it doesn't stay open over the new page.
+    useEffect(() => {
+        return router.on('navigate', () => setMobileSidebarOpen(false));
+    }, []);
 
     useEffect(() => {
         const handle = (e: KeyboardEvent) => {
@@ -79,9 +85,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
     return (
         <div className="flex h-full overflow-hidden">
-            <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((c) => !c)} />
+            <Sidebar
+                collapsed={sidebarCollapsed}
+                onToggle={() => setSidebarCollapsed((c) => !c)}
+                mobileOpen={mobileSidebarOpen}
+                onCloseMobile={() => setMobileSidebarOpen(false)}
+            />
             <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-                <Navbar user={auth.user} onLogout={handleLogout} onOpenSearch={() => setCmdOpen(true)} isDark={isDark} onToggleTheme={toggleTheme} />
+                <Navbar
+                    user={auth.user}
+                    onLogout={handleLogout}
+                    onOpenSearch={() => setCmdOpen(true)}
+                    onOpenSidebar={() => setMobileSidebarOpen(true)}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
+                />
                 <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
             </div>
 

@@ -4,23 +4,42 @@
  * TemplatePreview.tsx — instead of hand-mapping a bespoke set of keys. The renderer
  * (TemplateRenderService) reads this same object to draw the field server-side.
  */
+/**
+ * Every size/position value accepts a plain number (template pixels), a `"*px"` string, or a
+ * `"*%"` string resolved against the canvas — see TemplateRenderService's resolveLength/resolveBox
+ * for the server-side equivalent, and TemplatePreview's scaledStyle for how the client scales
+ * these down to fit the preview container.
+ */
+type Length = number | string;
+
 export interface TemplateFieldStyle {
-    /** Top-left corner of the field's box, like CSS `position: absolute; top/left`. */
-    top: number;
-    left: number;
-    width: number;
-    /** Required for image fields; optional for text (only affects the background/border box). */
-    height?: number;
+    /** Top-left corner of the field's box, like CSS `position: absolute; top/left`. Optional since
+     *  `right`/`bottom` can anchor the box from the opposite edge instead. */
+    top?: Length;
+    left?: Length;
+    right?: Length;
+    bottom?: Length;
+    /** Required for image fields unless derivable from opposing edges (left+right/top+bottom);
+     *  optional for text (only affects the background/border box, or is left to shrink-to-fit). */
+    width?: Length;
+    height?: Length;
     color?: string;
-    fontSize?: number;
+    fontSize?: Length;
     textAlign?: 'left' | 'center' | 'right';
+    /** Switches a text field to flexbox alignment via alignItems/justifyContent instead of
+     *  textAlign's always-top-anchored default — see TemplateRenderService's mapFlexAlign. */
+    display?: 'flex';
+    alignItems?: string;
+    justifyContent?: string;
     lineHeight?: number;
     backgroundColor?: string;
+    /** CSS `url('path')` syntax — same path rules as `default`/background image. */
+    backgroundImage?: string;
     borderColor?: string;
-    borderWidth?: number;
+    borderWidth?: Length;
     /** Preview-only — the server renderer draws square corners. */
-    borderRadius?: number;
-    padding?: number;
+    borderRadius?: Length;
+    padding?: Length;
     /** Image fields only. */
     objectFit?: 'cover' | 'contain';
 }
