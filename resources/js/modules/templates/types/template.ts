@@ -32,6 +32,10 @@ export interface TemplateField {
     default?: string | null;
     default_url?: string | null;
     editable: boolean;
+    /** True hides this field from end users entirely (customize form + preview) — the server strips
+     *  hidden fields out of the customize page's props, so this is a defense-in-depth flag for any
+     *  admin-side preview that still renders it (see TemplatePreview's `revealHidden`). */
+    hidden?: boolean;
     style: TemplateFieldStyle;
 }
 

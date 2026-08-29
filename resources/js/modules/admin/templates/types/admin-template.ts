@@ -38,6 +38,7 @@ export const DEFAULT_CONFIG_TEMPLATE = JSON.stringify(
                 label: 'Headline',
                 default: 'Breaking News',
                 editable: true,
+                hidden: false,
                 style: {
                     top: 40,
                     left: 40,
@@ -45,6 +46,7 @@ export const DEFAULT_CONFIG_TEMPLATE = JSON.stringify(
                     fontSize: 48,
                     color: '#ffffff',
                     textAlign: 'left',
+                    lineHeight: 1.25,
                 },
             },
         ],

@@ -36,7 +36,17 @@ class TemplateService
     {
         $this->authorizeAccess($template);
 
-        $template->setAttribute('config', $template->resolveConfigUrls());
+        $config = $template->resolveConfigUrls();
+
+        // Hidden fields never reach the customize page — stripped here (not just hidden via CSS)
+        // so a curious end user can't find them in the Inertia response either. The underlying
+        // Template model/DB row is untouched, so TemplateRenderService still draws them normally.
+        $config['fields'] = array_values(array_filter(
+            $config['fields'] ?? [],
+            fn (array $field) => empty($field['hidden']),
+        ));
+
+        $template->setAttribute('config', $config);
 
         return [
             'template' => $template,
