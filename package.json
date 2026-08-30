@@ -24,6 +24,7 @@
         "@inertiajs/react": "^3.6.1",
         "@inertiajs/vite": "^3.6.1",
         "lucide-react": "^0.545.0",
+        "modern-screenshot": "^4.7.0",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "ziggy-js": "^2.6.3"

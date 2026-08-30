@@ -29,9 +29,8 @@ class UtilsHelper
 
     /**
      * Pulls the path/URL out of a CSS `url('...')` value, e.g. a template field's
-     * `style.backgroundImage` — shared by the server-side renderer (TemplateRenderService, which
-     * needs the raw path/URL to fetch the image) and Template::resolveConfigUrls() (which needs it
-     * to rewrite the style into a real media URL the browser preview can load).
+     * `style.backgroundImage` — used by Template::resolveConfigUrls() to rewrite the style into a
+     * real media URL the browser preview (and its client-side image export) can load.
      */
     public static function ExtractCssUrl(?string $value): ?string
     {

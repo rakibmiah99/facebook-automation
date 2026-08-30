@@ -2,15 +2,17 @@
 
 namespace App\Services;
 
+use App\Helpers\UtilsHelper;
 use App\Http\Requests\TemplateGenerateRequest;
 use App\Models\Template;
 use App\Models\TemplateGeneration;
+use App\Repositories\MediaHelperRepositoryInterface;
 use Illuminate\Support\Facades\Auth;
 
 class TemplateService
 {
     public function __construct(
-        private TemplateRenderService $renderService,
+        private MediaHelperRepositoryInterface $mediaHelper,
     ) {
     }
 
@@ -61,9 +63,14 @@ class TemplateService
         $this->authorizeAccess($template);
 
         $values = $request->validated('values', []);
-        $images = array_filter($request->file('images', []));
 
-        $path = $this->renderService->render($template, $values, $images);
+        // The browser already rendered the final image from this same config (see
+        // resources/js/modules/templates/utils/renderTemplateImage.ts) — nothing left to do
+        // server-side but store it through the normal Media Helper pipeline.
+        $path = $this->mediaHelper->upload(
+            $request->file('generated_image'),
+            UtilsHelper::MonthYearWisePath('templates'),
+        );
 
         return TemplateGeneration::create([
             'template_id' => $template->id,

@@ -9,6 +9,7 @@ use App\Models\TemplateGeneration;
 use App\Models\User;
 use App\Repositories\FacebookRepositoryInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Fakes\FakeFacebookRepository;
 use Tests\TestCase;
@@ -58,7 +59,9 @@ class TemplateTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($userB)
-            ->post(route('templates.generate', ['template' => $template->id]), [])
+            ->post(route('templates.generate', ['template' => $template->id]), [
+                'generated_image' => UploadedFile::fake()->image('generated.png'),
+            ])
             ->assertForbidden();
     }
 
@@ -81,6 +84,7 @@ class TemplateTest extends TestCase
         $this->actingAs($user)
             ->post(route('templates.generate', ['template' => $template->id]), [
                 'values' => ['headline' => 'My Custom Headline'],
+                'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
             ])
             ->assertRedirect();
 
@@ -88,40 +92,7 @@ class TemplateTest extends TestCase
         $this->assertSame($originalConfig, $template->config);
     }
 
-    public function test_generate_supports_center_right_and_middle_alignment(): void
-    {
-        $template = Template::create([
-            'name' => 'Aligned Template',
-            'aspect_ratio' => '1:1',
-            'width' => 200,
-            'height' => 200,
-            'config' => [
-                'background' => ['type' => 'color', 'value' => '#ffffff', 'editable' => false],
-                'fields' => [
-                    [
-                        'key' => 'centered', 'type' => 'text', 'label' => 'Centered', 'default' => 'Centered text',
-                        'x' => 100, 'y' => 100, 'width' => 150, 'font_size' => 18, 'align' => 'center', 'valign' => 'middle', 'editable' => false,
-                    ],
-                    [
-                        'key' => 'cornered', 'type' => 'text', 'label' => 'Cornered', 'default' => 'Bottom right',
-                        'x' => 190, 'y' => 190, 'width' => 150, 'font_size' => 14, 'align' => 'right', 'valign' => 'bottom', 'editable' => false,
-                    ],
-                ],
-            ],
-            'is_common' => true,
-            'is_active' => true,
-        ]);
-        $user = User::factory()->create();
-
-        $this->actingAs($user)
-            ->post(route('templates.generate', ['template' => $template->id]), [])
-            ->assertRedirect();
-
-        $generated = session('generated');
-        Storage::disk('r2')->assertExists($generated->path);
-    }
-
-    public function test_generate_stores_an_image_with_the_templates_dimensions_via_the_media_helper(): void
+    public function test_generate_stores_the_client_rendered_image_via_the_media_helper(): void
     {
         $template = $this->createCommonTemplate();
         $user = User::factory()->create();
@@ -129,6 +100,7 @@ class TemplateTest extends TestCase
         $this->actingAs($user)
             ->post(route('templates.generate', ['template' => $template->id]), [
                 'values' => ['headline' => 'Hello World'],
+                'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
             ])
             ->assertRedirect();
 
@@ -154,6 +126,7 @@ class TemplateTest extends TestCase
 
         $this->actingAs($user)->post(route('templates.generate', ['template' => $template->id]), [
             'values' => ['headline' => 'Hello World'],
+            'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
         ]);
 
         $this->actingAs($user)
@@ -173,6 +146,7 @@ class TemplateTest extends TestCase
 
         $this->actingAs($user)->post(route('templates.generate', ['template' => $template->id]), [
             'values' => ['headline' => 'Hello World'],
+            'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
         ]);
         $generated = session('generated');
 
@@ -202,6 +176,7 @@ class TemplateTest extends TestCase
 
         $this->actingAs($user)->post(route('templates.generate', ['template' => $template->id]), [
             'values' => ['headline' => 'Hello World'],
+            'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
         ]);
         $generated = session('generated');
 
@@ -228,6 +203,7 @@ class TemplateTest extends TestCase
 
         $this->actingAs($user)->post(route('templates.generate', ['template' => $template->id]), [
             'values' => ['headline' => 'Hello World'],
+            'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
         ]);
         $generated = session('generated');
 
@@ -258,6 +234,7 @@ class TemplateTest extends TestCase
 
         $this->actingAs($owner)->post(route('templates.generate', ['template' => $template->id]), [
             'values' => ['headline' => 'Hello World'],
+            'generated_image' => UploadedFile::fake()->image('generated.png', 200, 200),
         ]);
         $generated = session('generated');
 

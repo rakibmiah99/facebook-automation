@@ -9,7 +9,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
  * Enforces the basic shape documented in resources/markdown/template-json-guideline.md: a valid
  * background, unique field keys, and the fields each field type needs (key/type/label/style).
  * Catching this at submission time keeps a structurally broken config (missing style, duplicate
- * keys) from ever reaching TemplateRenderService. Deliberately does NOT enforce that style values
+ * keys) from ever reaching the preview/renderer. Deliberately does NOT enforce that style values
  * are pixel numbers — admins may still author with CSS percentages/units, which is on them to get
  * right; this rule only guards against configs that would crash rendering outright.
  */

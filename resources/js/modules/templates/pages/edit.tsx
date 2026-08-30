@@ -1,5 +1,6 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Check } from 'lucide-react';
+import { domToBlob } from 'modern-screenshot';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { route } from 'ziggy-js';
 import FormField from '../../../shared/components/FormField';
@@ -23,6 +24,8 @@ interface Props {
 interface GenerateForm {
     values: Record<string, string>;
     images: Record<string, File | null>;
+    /** Filled in right before submit — see submitGenerate(). Not user-editable. */
+    generated_image: File | null;
 }
 
 interface PostForm {
@@ -79,6 +82,7 @@ export default function TemplateEdit({ data }: Props) {
     const [step, setStep] = useState<1 | 2>(1);
     const [selectedGeneration, setSelectedGeneration] = useState<TemplateGeneration | null>(null);
     const lastHandledGenerationId = useRef<number | null>(null);
+    const previewRef = useRef<HTMLDivElement>(null);
 
     const fields = useMemo(() => template.config.fields ?? [], [template.config.fields]);
     const backgroundEditable = template.config.background?.type === 'image' && template.config.background.editable;
@@ -86,9 +90,12 @@ export default function TemplateEdit({ data }: Props) {
     const generateForm = useForm<GenerateForm>({
         values: Object.fromEntries(fields.filter((f) => f.type === 'text').map((f) => [f.key, f.default ?? ''])),
         images: {},
+        generated_image: null,
     });
 
     const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
+    const [isRendering, setIsRendering] = useState(false);
+    const [renderError, setRenderError] = useState<string | null>(null);
 
     useEffect(() => {
         const urls: Record<string, string> = {};
@@ -108,8 +115,35 @@ export default function TemplateEdit({ data }: Props) {
         generateForm.setData('images', { ...generateForm.data.images, [key]: file });
     };
 
-    const submitGenerate = (e: React.FormEvent) => {
+    const submitGenerate = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!previewRef.current) return;
+
+        setRenderError(null);
+        setIsRendering(true);
+
+        let blob: Blob | null;
+
+        try {
+            // Screenshot the preview at the template's real pixel size instead of whatever
+            // (possibly shrunk) size it happens to be displayed at.
+            blob = await domToBlob(previewRef.current, { scale: template.width / previewRef.current.clientWidth });
+        } catch {
+            blob = null;
+        }
+
+        setIsRendering(false);
+
+        if (!blob) {
+            setRenderError('Could not capture the preview image. Please try again.');
+            return;
+        }
+
+        const generatedImage = new File([blob], 'generated.png', { type: 'image/png' });
+
+        // Only 'values' + the screenshot are actually sent — 'images' is local-only state that
+        // feeds the on-screen preview being screenshotted above.
+        generateForm.transform((data) => ({ values: data.values, generated_image: generatedImage }));
         generateForm.post(route('templates.generate', { template: template.id }), {
             forceFormData: true,
             preserveScroll: true,
@@ -188,6 +222,7 @@ export default function TemplateEdit({ data }: Props) {
                             <div className="space-y-4">
                                 <div className="rounded-2xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
                                     <TemplatePreview
+                                        ref={previewRef}
                                         config={template.config}
                                         width={template.width}
                                         height={template.height}
@@ -233,11 +268,6 @@ export default function TemplateEdit({ data }: Props) {
                                                 onChange={(e) => setImage(field.key, e.target.files?.[0] ?? null)}
                                                 className="w-full text-xs"
                                             />
-                                            {generateErrors[`images.${field.key}`] && (
-                                                <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>
-                                                    {generateErrors[`images.${field.key}`]}
-                                                </p>
-                                            )}
                                         </div>
                                     ),
                                 )}
@@ -256,13 +286,19 @@ export default function TemplateEdit({ data }: Props) {
                                     </div>
                                 )}
 
+                                {(renderError || generateErrors.generated_image) && (
+                                    <p className="text-xs" style={{ color: 'var(--color-danger)' }}>
+                                        {renderError ?? generateErrors.generated_image}
+                                    </p>
+                                )}
+
                                 <button
                                     type="submit"
-                                    disabled={generateForm.processing}
+                                    disabled={isRendering || generateForm.processing}
                                     className="w-full py-2.5 rounded-lg text-sm font-semibold transition-opacity"
-                                    style={{ background: 'var(--color-primary)', color: 'white', opacity: generateForm.processing ? 0.6 : 1 }}
+                                    style={{ background: 'var(--color-primary)', color: 'white', opacity: isRendering || generateForm.processing ? 0.6 : 1 }}
                                 >
-                                    {generateForm.processing ? 'Generating…' : 'Generate Image'}
+                                    {isRendering ? 'Rendering…' : generateForm.processing ? 'Uploading…' : 'Generate Image'}
                                 </button>
                             </form>
                         </div>
