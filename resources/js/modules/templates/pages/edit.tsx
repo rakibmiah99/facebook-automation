@@ -151,9 +151,15 @@ export default function TemplateEdit({ data }: Props) {
 
         try {
             // Screenshot the preview at the template's real pixel size instead of whatever
-            // (possibly shrunk) size it happens to be displayed at.
+            // (possibly shrunk) size it happens to be displayed at. JPEG rather than PNG — a
+            // full-resolution PNG of a noisy/textured background can run well past PHP's default
+            // upload_max_filesize (2M) and fail to upload with no useful error; JPEG compresses
+            // that kind of image far better while still looking the same for a social post.
             blob = await domToBlob(previewRef.current, {
                 scale: template.width / previewRef.current.clientWidth,
+                type: 'image/jpeg',
+                quality: 0.92,
+                backgroundColor: '#ffffff',
                 fetchFn: (url) => (url.startsWith('http') ? fetchImageViaProxy(url) : Promise.resolve(false)),
             });
         } catch {
@@ -167,7 +173,7 @@ export default function TemplateEdit({ data }: Props) {
             return;
         }
 
-        const generatedImage = new File([blob], 'generated.png', { type: 'image/png' });
+        const generatedImage = new File([blob], 'generated.jpg', { type: 'image/jpeg' });
 
         // Only 'values' + the screenshot are actually sent — 'images' is local-only state that
         // feeds the on-screen preview being screenshotted above.

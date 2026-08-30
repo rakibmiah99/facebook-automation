@@ -8,6 +8,8 @@ use App\Models\Template;
 use App\Models\TemplateGeneration;
 use App\Repositories\MediaHelperRepositoryInterface;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TemplateService
 {
@@ -65,12 +67,22 @@ class TemplateService
         $values = $request->validated('values', []);
 
         // The browser already rendered the final image from this same config (see
-        // resources/js/modules/templates/utils/renderTemplateImage.ts) — nothing left to do
-        // server-side but store it through the normal Media Helper pipeline.
-        $path = $this->mediaHelper->upload(
-            $request->file('generated_image'),
-            UtilsHelper::MonthYearWisePath('templates'),
-        );
+        // templates/pages/edit.tsx) — nothing left to do server-side but store it through the
+        // normal Media Helper pipeline.
+        try {
+            $path = $this->mediaHelper->upload(
+                $request->file('generated_image'),
+                UtilsHelper::MonthYearWisePath('templates'),
+            );
+        } catch (Throwable $e) {
+            Log::error('Failed to store a generated template image.', [
+                'template_id' => $template->id,
+                'user_id' => Auth::id(),
+                'exception' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
 
         return TemplateGeneration::create([
             'template_id' => $template->id,

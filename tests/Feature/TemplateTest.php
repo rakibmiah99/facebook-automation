@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Repositories\FacebookRepositoryInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Tests\Fakes\FakeFacebookRepository;
 use Tests\TestCase;
@@ -117,6 +118,22 @@ class TemplateTest extends TestCase
             'template_id' => $template->id,
             'user_id' => $user->id,
         ]);
+    }
+
+    public function test_a_missing_generated_image_fails_validation_and_is_logged(): void
+    {
+        Log::spy();
+
+        $template = $this->createCommonTemplate();
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('templates.generate', ['template' => $template->id]), [
+                'values' => ['headline' => 'Hello World'],
+            ])
+            ->assertSessionHasErrors('generated_image');
+
+        Log::shouldHaveReceived('error')->once();
     }
 
     public function test_generation_appears_in_the_edit_pages_history_list(): void
