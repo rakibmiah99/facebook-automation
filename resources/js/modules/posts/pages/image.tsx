@@ -81,7 +81,7 @@ export default function ImagePost({ data }: Props) {
             <Head title="Image Post" />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-2xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     {/* Header */}
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>

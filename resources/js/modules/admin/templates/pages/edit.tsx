@@ -46,7 +46,7 @@ export default function AdminTemplateEdit({ data }: Props) {
             <Head title={`Edit · ${template.name}`} />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-5xl mx-auto w-full space-y-6">
+                <div className="p mx-auto w-full space-y-6">
                     <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>
                         Edit Template
                     </h1>
@@ -55,7 +55,7 @@ export default function AdminTemplateEdit({ data }: Props) {
                         <img src={template.preview_url} alt={template.name} className="rounded-xl max-h-48 object-contain" />
                     )}
 
-                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
+                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(460px,520px)_minmax(0,1fr)]">
                     <form
                         onSubmit={submit}
                         className="rounded-2xl p-6 space-y-5 h-fit"
@@ -140,7 +140,7 @@ export default function AdminTemplateEdit({ data }: Props) {
                                 <TemplateJsonGuidelineModal />
                             </div>
                             <textarea
-                                rows={14}
+                                rows={32}
                                 value={form.data.config}
                                 onChange={(e) => form.setData('config', e.target.value)}
                                 className="w-full px-3.5 py-2.5 rounded-lg text-xs font-mono outline-none"

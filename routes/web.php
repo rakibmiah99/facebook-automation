@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacebookAppAccountController;
 use App\Http\Controllers\FacebookAppController;
 use App\Http\Controllers\FacebookAuthController;
+use App\Http\Controllers\MediaProxyController;
 use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\TemplateController;
@@ -16,6 +17,8 @@ Route::redirect('/', '/dashboard');
 Route::get('/facebook/callback', [FacebookAuthController::class, 'callback'])->name('facebook.callback');
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
+
+    Route::get('/media/proxy', [MediaProxyController::class, 'show'])->name('media.proxy');
 
     Route::get('/facebook/connect', [FacebookAuthController::class, 'connect'])->name('facebook.connect');
 

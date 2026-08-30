@@ -31,7 +31,7 @@ export default function Accounts({ data }: Props) {
             <Head title={`Accounts · ${app.app_name}`} />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     <Link
                         href={route('facebook-apps.index')}
                         className="inline-flex items-center gap-1.5 text-xs w-fit"

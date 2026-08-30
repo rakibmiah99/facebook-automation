@@ -30,7 +30,7 @@ export default function AdminTemplatesIndex({ data }: Props) {
             <Head title="Manage Templates" />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-5xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
                             <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>

@@ -45,12 +45,12 @@ export default function AdminTemplateCreate({ data }: Props) {
             <Head title="New Template" />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-5xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>
                         New Template
                     </h1>
 
-                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
+                    <div className="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(400px,520px)_minmax(0,1fr)]">
                     <form
                         onSubmit={submit}
                         className="rounded-2xl p-6 space-y-5 h-fit"
@@ -133,7 +133,7 @@ export default function AdminTemplateCreate({ data }: Props) {
                                 <TemplateJsonGuidelineModal />
                             </div>
                             <textarea
-                                rows={12}
+                                rows={32}
                                 value={form.data.config}
                                 onChange={(e) => form.setData('config', e.target.value)}
                                 className="w-full px-3.5 py-2.5 rounded-lg text-xs font-mono outline-none"

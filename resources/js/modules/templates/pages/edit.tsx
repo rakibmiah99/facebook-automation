@@ -38,6 +38,31 @@ interface PostForm {
     comment_attachment: File | null;
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+    });
+}
+
+/**
+ * modern-screenshot needs every embedded image as a data URL to avoid a tainted canvas — CDN
+ * URLs (R2, etc.) usually don't send CORS headers, so its own cross-origin fetch fails and the
+ * image renders blank in the captured file even though it displays fine as a plain `<img>`.
+ * Routing the fetch through our own same-origin proxy (see MediaProxyController) sidesteps that.
+ */
+async function fetchImageViaProxy(url: string): Promise<string | false> {
+    try {
+        const response = await fetch(route('media.proxy', { url }));
+
+        return response.ok ? await blobToDataUrl(await response.blob()) : false;
+    } catch {
+        return false;
+    }
+}
+
 const emptyPostForm: PostForm = {
     account_ids: [],
     caption: '',
@@ -127,7 +152,10 @@ export default function TemplateEdit({ data }: Props) {
         try {
             // Screenshot the preview at the template's real pixel size instead of whatever
             // (possibly shrunk) size it happens to be displayed at.
-            blob = await domToBlob(previewRef.current, { scale: template.width / previewRef.current.clientWidth });
+            blob = await domToBlob(previewRef.current, {
+                scale: template.width / previewRef.current.clientWidth,
+                fetchFn: (url) => (url.startsWith('http') ? fetchImageViaProxy(url) : Promise.resolve(false)),
+            });
         } catch {
             blob = null;
         }
@@ -191,7 +219,7 @@ export default function TemplateEdit({ data }: Props) {
             <Head title={`Customize · ${template.name}`} />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-5xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     <div>
                         <Link href={route('templates.index')} className="text-xs" style={{ color: 'var(--color-muted)' }}>
                             ← Back to Templates

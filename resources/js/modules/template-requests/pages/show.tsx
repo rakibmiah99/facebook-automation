@@ -25,7 +25,7 @@ export default function TemplateRequestShow({ data }: Props) {
             <Head title={request.title} />
 
             <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--color-bg)' }}>
-                <div className="p-6 max-w-2xl mx-auto w-full space-y-6">
+                <div className="p-6 mx-auto w-full space-y-6">
                     <div>
                         <Link href={route('template-requests.index')} className="text-xs" style={{ color: 'var(--color-muted)' }}>
                             ← Back to Requests
