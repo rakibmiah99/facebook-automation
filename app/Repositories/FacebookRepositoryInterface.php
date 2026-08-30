@@ -38,4 +38,18 @@ interface FacebookRepositoryInterface
      * @return array{id: string}
      */
     public function createComment(string $pageAccessToken, string $postId, ?string $message = null, ?string $attachmentUrl = null): array;
+
+    /**
+     * Get every post published to a Facebook Page, following pagination automatically.
+     *
+     * @return array<int, array{id: string, message?: string, created_time?: string, permalink_url?: string, attachments?: array}>
+     */
+    public function getPagePosts(string $pageAccessToken, string $pageId): array;
+
+    /**
+     * Get a single Facebook post by its Graph API post id.
+     *
+     * @return array{id: string, message?: string, created_time?: string, permalink_url?: string, attachments?: array}
+     */
+    public function getPost(string $pageAccessToken, string $postId): array;
 }

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['facebook_app_account_id', 'user_id', 'template_id', 'template_generation_id', 'post_id', 'is_published', 'is_scheduled', 'scheduled_at', 'post_type'])]
+#[Fillable(['facebook_app_account_id', 'user_id', 'template_id', 'template_generation_id', 'post_id', 'permalink_url', 'is_published', 'is_scheduled', 'scheduled_at', 'published_at', 'post_type'])]
 class Post extends Model
 {
     protected function casts(): array
@@ -17,6 +17,7 @@ class Post extends Model
             'is_published' => 'boolean',
             'is_scheduled' => 'boolean',
             'scheduled_at' => 'datetime',
+            'published_at' => 'datetime',
         ];
     }
 
@@ -43,6 +44,11 @@ class Post extends Model
     public function content(): HasOne
     {
         return $this->hasOne(PostContent::class);
+    }
+
+    public function contents(): HasMany
+    {
+        return $this->hasMany(PostContent::class);
     }
 
     public function comments(): HasMany

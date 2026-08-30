@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PostImageStoreRequest;
+use App\Http\Requests\PostIndexRequest;
 use App\Http\Requests\PostStoreRequest;
+use App\Models\FacebookAppAccount;
 use App\Models\Post;
 use App\Services\PostService;
 use Illuminate\Http\RedirectResponse;
@@ -54,9 +56,10 @@ class PostController extends Controller
             ->with(...$this->summaryFlash($summary));
     }
 
-    public function index(): Response
+    public function index(PostIndexRequest $request): Response
     {
-        $data = $this->postService->index();
+        $data = $this->postService->index($request->validated());
+
         return Inertia::render('posts/pages/list', [
             'data' => $data,
         ]);
@@ -75,6 +78,36 @@ class PostController extends Controller
         return redirect()
             ->route('posts.index')
             ->with('success', 'Post published successfully.');
+    }
+
+    public function syncAccount(FacebookAppAccount $facebookAppAccount): RedirectResponse
+    {
+        try {
+            $summary = $this->postService->syncAccountPosts($facebookAppAccount);
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->route('facebook-app-accounts.index', $facebookAppAccount->facebook_app_id)
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('facebook-app-accounts.index', $facebookAppAccount->facebook_app_id)
+            ->with('success', "Synced {$summary['total']} post(s) — {$summary['created']} new, {$summary['updated']} updated.");
+    }
+
+    public function sync(Post $post): RedirectResponse
+    {
+        try {
+            $this->postService->syncPost($post);
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->route('posts.index')
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('posts.index')
+            ->with('success', 'Post synced successfully.');
     }
 
     /**

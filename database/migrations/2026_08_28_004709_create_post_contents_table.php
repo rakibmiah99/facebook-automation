@@ -16,7 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('post_id');
             $table->string('content_type')->comment('image, video, text');
             $table->string('content_path')->nullable()->default(null);
-            $table->string('content_text')->nullable()->default(null);
+            $table->text('content_text')->nullable()->default(null);
             $table->timestamps();
             $table->foreign('post_id')->references('id')->on('posts')->onDelete('cascade');
         });

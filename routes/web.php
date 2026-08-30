@@ -37,6 +37,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/posts/image', [PostController::class, 'showImage'])->name('posts.image');
     Route::post('/posts/image', [PostController::class, 'storeImage'])->name('posts.image.store');
     Route::post('/posts/{post}/retry', [PostController::class, 'retry'])->name('posts.retry');
+    Route::post('/posts/{post}/sync', [PostController::class, 'sync'])->name('posts.sync');
+    Route::post('/posts/sync/{facebookAppAccount}', [PostController::class, 'syncAccount'])->name('posts.sync-account');
 
     Route::post('/posts/comments/{postComment}/retry', [PostCommentController::class, 'retry'])->name('posts.comments.retry');
 

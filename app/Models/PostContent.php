@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['post_id', 'content_type', 'content_path', 'content_text'])]
+#[Fillable(['post_id', 'content_type', 'content_path', 'source_url', 'content_text'])]
 #[Appends(['content_url'])]
 class PostContent extends Model
 {
@@ -24,7 +24,7 @@ class PostContent extends Model
         return Attribute::make(
             get: fn () => $this->content_path
                 ? UtilsHelper::GetMediaUrl($this->content_path)
-                : null,
+                : $this->source_url,
         );
     }
 

@@ -1,0 +1,429 @@
+<?php
+
+namespace App\Services\Facebook;
+
+use App\Models\Post;
+use App\Models\PostContent;
+use Illuminate\Support\Facades\Http;
+
+class FacebookPostSyncService
+{
+    protected string $graphVersion = 'v26.0';
+
+    /**
+     * Sync all Facebook Page posts into local database.
+     */
+    public function syncPosts(
+        string $pageId,
+        string $pageAccessToken,
+        int $facebookAppAccountId,
+        int $userId
+    ): array {
+        $posts = $this->getAllPosts(
+            pageId: $pageId,
+            pageAccessToken: $pageAccessToken
+        );
+
+        $created = 0;
+        $updated = 0;
+
+        foreach ($posts as $facebookPost) {
+            $result = $this->syncSinglePost(
+                facebookPost: $facebookPost,
+                facebookAppAccountId: $facebookAppAccountId,
+                userId: $userId
+            );
+
+            if ($result === 'created') {
+                $created++;
+            } elseif ($result === 'updated') {
+                $updated++;
+            }
+        }
+
+        return [
+            'total' => count($posts),
+            'created' => $created,
+            'updated' => $updated,
+        ];
+    }
+
+    /**
+     * Get all posts from Facebook Page.
+     *
+     * Handles Facebook pagination automatically.
+     */
+    protected function getAllPosts(
+        string $pageId,
+        string $pageAccessToken
+    ): array {
+        $url = "https://graph.facebook.com/{$this->graphVersion}/{$pageId}/posts";
+
+        $params = [
+            'fields' => implode(',', [
+                'id',
+                'message',
+                'created_time',
+                'permalink_url',
+                'attachments',
+            ]),
+            'limit' => 100,
+            'access_token' => $pageAccessToken,
+        ];
+
+        $posts = [];
+
+        do {
+            $response = Http::timeout(30)
+                ->get($url, $params);
+
+            if ($response->failed()) {
+                throw new \Exception(
+                    $response->json(
+                        'error.message',
+                        'Facebook API error'
+                    )
+                );
+            }
+
+            $data = $response->json();
+
+            foreach ($data['data'] ?? [] as $facebookPost) {
+                $posts[] = $facebookPost;
+            }
+
+            /*
+             * Facebook's next URL already contains
+             * all required query parameters.
+             */
+            $url = $data['paging']['next'] ?? null;
+
+            $params = [];
+
+        } while ($url);
+
+        return $posts;
+    }
+
+    /**
+     * Sync a single Facebook post.
+     */
+    protected function syncSinglePost(
+        array $facebookPost,
+        int $facebookAppAccountId,
+        int $userId
+    ): string {
+        $facebookPostId = $facebookPost['id'] ?? null;
+
+        if (!$facebookPostId) {
+            return 'skipped';
+        }
+
+        /*
+         * Find existing post using:
+         *
+         * facebook_app_account_id
+         * +
+         * Facebook post_id
+         */
+        $post = Post::where(
+            'facebook_app_account_id',
+            $facebookAppAccountId
+        )
+            ->where('post_id', $facebookPostId)
+            ->first();
+
+        $isNew = !$post;
+
+        if (!$post) {
+            $post = new Post();
+
+            $post->facebook_app_account_id = $facebookAppAccountId;
+            $post->user_id = $userId;
+            $post->post_id = $facebookPostId;
+        }
+
+        /*
+         * Facebook post information.
+         */
+        $post->is_published = true;
+        $post->is_scheduled = false;
+        $post->scheduled_at = null;
+
+        $post->post_type = $this->resolvePostType(
+            facebookPost: $facebookPost
+        );
+
+        /*
+         * Facebook published date.
+         */
+        $post->published_at = $this->parseFacebookDate(
+            $facebookPost['created_time'] ?? null
+        );
+
+        /*
+         * Facebook permalink.
+         */
+        $post->permalink_url = $facebookPost['permalink_url']
+            ?? null;
+
+        $post->save();
+
+        /*
+         * Re-sync post contents.
+         *
+         * Since Facebook can change attachments,
+         * remove old local contents and rebuild them.
+         */
+        $post->contents()->delete();
+
+        $this->syncPostContents(
+            post: $post,
+            facebookPost: $facebookPost
+        );
+
+        return $isNew ? 'created' : 'updated';
+    }
+
+    /**
+     * Convert Facebook created_time into a database datetime.
+     */
+    protected function parseFacebookDate(
+        ?string $createdTime
+    ): ?string {
+        if (!$createdTime) {
+            return null;
+        }
+
+        try {
+            return date(
+                'Y-m-d H:i:s',
+                strtotime($createdTime)
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Determine Facebook post type.
+     *
+     * Returns:
+     * - text
+     * - image
+     * - video
+     */
+    protected function resolvePostType(
+        array $facebookPost
+    ): string {
+        $attachments =
+            $facebookPost['attachments']['data'] ?? [];
+
+        if (empty($attachments)) {
+            return 'text';
+        }
+
+        foreach ($attachments as $attachment) {
+            $type = strtolower(
+                $attachment['type'] ?? ''
+            );
+
+            if ($this->isVideoAttachment($attachment)) {
+                return 'video';
+            }
+
+            if ($this->isImageAttachment($attachment)) {
+                return 'image';
+            }
+
+            /*
+             * Fallback based on Facebook attachment type.
+             */
+            if (str_contains($type, 'video')) {
+                return 'video';
+            }
+
+            if (
+                str_contains($type, 'photo') ||
+                str_contains($type, 'image')
+            ) {
+                return 'image';
+            }
+        }
+
+        return 'text';
+    }
+
+    /**
+     * Sync Facebook post contents.
+     */
+    protected function syncPostContents(
+        Post $post,
+        array $facebookPost
+    ): void {
+        /*
+         * Text content.
+         */
+        $message = $facebookPost['message'] ?? null;
+
+        if ($message !== null && $message !== '') {
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'text',
+                'content_path' => null,
+                'source_url' => null,
+                'content_text' => $message,
+            ]);
+        }
+
+        /*
+         * Facebook attachments.
+         */
+        $attachments =
+            $facebookPost['attachments']['data'] ?? [];
+
+        foreach ($attachments as $attachment) {
+            $this->createAttachmentContent(
+                post: $post,
+                attachment: $attachment
+            );
+
+            /*
+             * Multiple-photo / carousel posts can contain
+             * nested subattachments.
+             */
+            $subAttachments =
+                $attachment['subattachments']['data'] ?? [];
+
+            foreach ($subAttachments as $subAttachment) {
+                $this->createAttachmentContent(
+                    post: $post,
+                    attachment: $subAttachment
+                );
+            }
+        }
+    }
+
+    /**
+     * Create local content record from a Facebook attachment.
+     *
+     * IMPORTANT:
+     *
+     * source_url = Facebook media URL
+     * content_path = local/R2 path
+     *
+     * At sync time content_path remains NULL.
+     */
+    protected function createAttachmentContent(
+        Post $post,
+        array $attachment
+    ): void {
+        /*
+         * Video.
+         */
+        if ($this->isVideoAttachment($attachment)) {
+            $videoUrl = $this->getVideoUrl($attachment);
+
+            if (!$videoUrl) {
+                return;
+            }
+
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'video',
+                'content_path' => null,
+                'source_url' => $videoUrl,
+                'content_text' => null,
+            ]);
+
+            return;
+        }
+
+        /*
+         * Image.
+         */
+        if ($this->isImageAttachment($attachment)) {
+            $imageUrl = $this->getImageUrl($attachment);
+
+            if (!$imageUrl) {
+                return;
+            }
+
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'image',
+                'content_path' => null,
+                'source_url' => $imageUrl,
+                'content_text' => null,
+            ]);
+        }
+    }
+
+    /**
+     * Determine whether an attachment is a video.
+     */
+    protected function isVideoAttachment(
+        array $attachment
+    ): bool {
+        $type = strtolower(
+            $attachment['type'] ?? ''
+        );
+
+        if (str_contains($type, 'video')) {
+            return true;
+        }
+
+        /*
+         * Some Graph API responses expose video
+         * source information through media.
+         */
+        return isset($attachment['media']['source']);
+    }
+
+    /**
+     * Determine whether an attachment is an image.
+     */
+    protected function isImageAttachment(
+        array $attachment
+    ): bool {
+        $type = strtolower(
+            $attachment['type'] ?? ''
+        );
+
+        if (
+            str_contains($type, 'photo') ||
+            str_contains($type, 'image')
+        ) {
+            return true;
+        }
+
+        return isset($attachment['media']['image']);
+    }
+
+    /**
+     * Get video source URL.
+     *
+     * Does NOT download the video.
+     */
+    protected function getVideoUrl(
+        array $attachment
+    ): ?string {
+        return $attachment['media']['source']
+            ?? $attachment['url']
+            ?? null;
+    }
+
+    /**
+     * Get image source URL.
+     *
+     * Does NOT download the image.
+     */
+    protected function getImageUrl(
+        array $attachment
+    ): ?string {
+        return $attachment['media']['image']['src']
+            ?? $attachment['media']['image']['url']
+            ?? $attachment['url']
+            ?? null;
+    }
+}

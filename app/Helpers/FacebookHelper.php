@@ -12,6 +12,12 @@ class FacebookHelper implements FacebookRepositoryInterface
 {
     protected string $baseUrl;
 
+    /**
+     * Fields requested when reading posts back from the Graph API. `attachments` already
+     * expands to include media, type, url and subattachments without extra field selectors.
+     */
+    private const POST_FIELDS = 'id,message,created_time,permalink_url,attachments';
+
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.facebook.base_url'), '/').'/'.config('services.facebook.version');
@@ -101,6 +107,56 @@ class FacebookHelper implements FacebookRepositoryInterface
 
             throw new RuntimeException(
                 $response->json('error.message') ?? 'Failed to publish the comment to Facebook.'
+            );
+        }
+
+        return $response->json();
+    }
+
+    public function getPagePosts(string $pageAccessToken, string $pageId): array
+    {
+        $url = "{$this->baseUrl}/{$pageId}/posts";
+        $params = [
+            'fields' => self::POST_FIELDS,
+            'limit' => 100,
+        ];
+
+        $posts = [];
+
+        do {
+            $response = Http::withToken($pageAccessToken)->timeout(30)->get($url, $params);
+
+            if ($response->failed()) {
+                $this->logFailure("{$pageId}/posts", $response, ['page_id' => $pageId]);
+
+                throw new RuntimeException(
+                    $response->json('error.message') ?? 'Failed to fetch posts from Facebook.'
+                );
+            }
+
+            $data = $response->json();
+
+            array_push($posts, ...($data['data'] ?? []));
+
+            // Facebook's next URL already carries every required query parameter, including the token.
+            $url = $data['paging']['next'] ?? null;
+            $params = [];
+        } while ($url);
+
+        return $posts;
+    }
+
+    public function getPost(string $pageAccessToken, string $postId): array
+    {
+        $response = Http::withToken($pageAccessToken)->get("{$this->baseUrl}/{$postId}", [
+            'fields' => self::POST_FIELDS,
+        ]);
+
+        if ($response->failed()) {
+            $this->logFailure($postId, $response, ['post_id' => $postId]);
+
+            throw new RuntimeException(
+                $response->json('error.message') ?? 'Failed to fetch the post from Facebook.'
             );
         }
 

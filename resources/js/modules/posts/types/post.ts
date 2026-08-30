@@ -41,3 +41,21 @@ export interface Paginated<T> {
     last_page: number;
     total: number;
 }
+
+export interface PostFilterAccount {
+    id: number;
+    account_name: string;
+}
+
+export type PostStatusFilter = 'published' | 'scheduled' | 'failed';
+
+export type PostTypeFilter = 'all' | 'text' | 'image';
+
+export interface PostFilters {
+    page: string | null;
+    search: string | null;
+    date_from: string | null;
+    date_to: string | null;
+    status: PostStatusFilter | null;
+    post_type: PostTypeFilter;
+}

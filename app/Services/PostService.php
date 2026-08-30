@@ -34,15 +34,46 @@ class PostService
         ];
     }
 
-    public function index(): array
+    public function index(array $filters = []): array
     {
+        $postType = $filters['post_type'] ?? 'all';
+
+        $posts = Post::query()
+            ->where('user_id', Auth::id())
+            ->when($filters['page'] ?? null, fn ($query, $page) => $query->where('facebook_app_account_id', $page))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $query->whereHas('content', fn ($contentQuery) => $contentQuery->where('content_text', 'like', "%{$search}%"));
+            })
+            ->when($filters['date_from'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '<=', $date))
+            ->when($filters['status'] ?? null, function ($query, $status) {
+                match ($status) {
+                    'scheduled' => $query->where('is_scheduled', true),
+                    'published' => $query->where('is_scheduled', false)->where('is_published', true),
+                    'failed' => $query->where('is_scheduled', false)->where('is_published', false),
+                    default => null,
+                };
+            })
+            ->when($postType !== 'all', fn ($query) => $query->where('post_type', $postType))
+            ->with(['facebookAppAccount:id,account_name,link', 'content', 'comments'])
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
         return [
-            'posts' => Post::query()
+            'posts' => $posts,
+            'accounts' => FacebookAppAccount::query()
                 ->where('user_id', Auth::id())
-                ->with(['facebookAppAccount:id,account_name,link', 'content', 'comments'])
-                ->latest()
-                ->paginate(15)
-                ->withQueryString(),
+                ->orderBy('account_name')
+                ->get(['id', 'account_name']),
+            'filters' => [
+                'page' => $filters['page'] ?? null,
+                'search' => $filters['search'] ?? null,
+                'date_from' => $filters['date_from'] ?? null,
+                'date_to' => $filters['date_to'] ?? null,
+                'status' => $filters['status'] ?? null,
+                'post_type' => $postType,
+            ],
         ];
     }
 
@@ -208,6 +239,254 @@ class PostService
         }
 
         return $summary;
+    }
+
+    /**
+     * Pull every post from a Facebook Page into the local database.
+     *
+     * @return array{total: int, created: int, updated: int}
+     */
+    public function syncAccountPosts(FacebookAppAccount $account): array
+    {
+        abort_unless($account->user_id === Auth::id(), 403);
+
+        $facebookPosts = $this->facebookRepository->getPagePosts($account->access_token, $account->account_id);
+
+        $summary = ['total' => 0, 'created' => 0, 'updated' => 0];
+
+        foreach ($facebookPosts as $facebookPost) {
+            [$post, $result] = $this->findOrNewPostFromFacebook($facebookPost, $account);
+
+            if (! $post) {
+                continue;
+            }
+
+            $this->applyFacebookPostData($post, $facebookPost);
+
+            $summary['total']++;
+            $summary[$result]++;
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Re-sync a single post's data (and contents) from Facebook.
+     */
+    public function syncPost(Post $post): Post
+    {
+        abort_unless($post->user_id === Auth::id(), 403);
+
+        if (! $post->post_id) {
+            throw new RuntimeException('This post has not been published to Facebook yet and cannot be synced.');
+        }
+
+        $post->loadMissing('facebookAppAccount');
+        $account = $post->facebookAppAccount;
+
+        if (! $account) {
+            throw new RuntimeException('This post is missing its Facebook Page account and cannot be synced.');
+        }
+
+        $facebookPost = $this->facebookRepository->getPost($account->access_token, $post->post_id);
+
+        $this->applyFacebookPostData($post, $facebookPost);
+
+        return $post->refresh();
+    }
+
+    /**
+     * @return array{0: ?Post, 1: string} [post, 'created'|'updated'|'skipped']
+     */
+    private function findOrNewPostFromFacebook(array $facebookPost, FacebookAppAccount $account): array
+    {
+        $facebookPostId = $facebookPost['id'] ?? null;
+
+        if (! $facebookPostId) {
+            return [null, 'skipped'];
+        }
+
+        $post = Post::query()
+            ->where('facebook_app_account_id', $account->id)
+            ->where('post_id', $facebookPostId)
+            ->first();
+
+        $isNew = ! $post;
+
+        if (! $post) {
+            $post = new Post([
+                'facebook_app_account_id' => $account->id,
+                'user_id' => $account->user_id,
+                'post_id' => $facebookPostId,
+            ]);
+        }
+
+        return [$post, $isNew ? 'created' : 'updated'];
+    }
+
+    /**
+     * Apply Facebook's post data onto the local model and rebuild its contents, since Facebook
+     * attachments can change and the local copies otherwise go stale.
+     */
+    private function applyFacebookPostData(Post $post, array $facebookPost): void
+    {
+        $post->fill([
+            'is_published' => true,
+            'is_scheduled' => false,
+            'scheduled_at' => null,
+            'post_type' => $this->resolvePostType($facebookPost),
+            'published_at' => $this->parseFacebookDate($facebookPost['created_time'] ?? null),
+            'permalink_url' => $facebookPost['permalink_url'] ?? null,
+        ]);
+
+        $post->save();
+
+        $post->contents()->delete();
+
+        $this->syncPostContents($post, $facebookPost);
+    }
+
+    /**
+     * Convert Facebook's created_time into a database datetime.
+     */
+    private function parseFacebookDate(?string $createdTime): ?string
+    {
+        if (! $createdTime) {
+            return null;
+        }
+
+        try {
+            return date('Y-m-d H:i:s', strtotime($createdTime));
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Determine the local post_type (text, image, video) from a Facebook post's attachments.
+     */
+    private function resolvePostType(array $facebookPost): string
+    {
+        $attachments = $facebookPost['attachments']['data'] ?? [];
+
+        foreach ($attachments as $attachment) {
+            if ($this->isVideoAttachment($attachment)) {
+                return 'video';
+            }
+
+            if ($this->isImageAttachment($attachment)) {
+                return 'image';
+            }
+        }
+
+        return 'text';
+    }
+
+    /**
+     * Rebuild the local PostContent rows for a post from Facebook's message and attachments.
+     */
+    private function syncPostContents(Post $post, array $facebookPost): void
+    {
+        $message = $facebookPost['message'] ?? null;
+
+        if ($message !== null && $message !== '') {
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'text',
+                'content_path' => null,
+                'source_url' => null,
+                'content_text' => $message,
+            ]);
+        }
+
+        $attachments = $facebookPost['attachments']['data'] ?? [];
+
+        foreach ($attachments as $attachment) {
+            $this->createAttachmentContent($post, $attachment);
+
+            // Multiple-photo / carousel posts nest their media under subattachments.
+            $subAttachments = $attachment['subattachments']['data'] ?? [];
+
+            foreach ($subAttachments as $subAttachment) {
+                $this->createAttachmentContent($post, $subAttachment);
+            }
+        }
+    }
+
+    /**
+     * Create a local content row from a Facebook attachment. source_url holds the Facebook
+     * media URL; content_path (the local/R2 copy) stays null until something downloads it.
+     */
+    private function createAttachmentContent(Post $post, array $attachment): void
+    {
+        if ($this->isVideoAttachment($attachment)) {
+            $videoUrl = $this->getVideoUrl($attachment);
+
+            if (! $videoUrl) {
+                return;
+            }
+
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'video',
+                'content_path' => null,
+                'source_url' => $videoUrl,
+                'content_text' => null,
+            ]);
+
+            return;
+        }
+
+        if ($this->isImageAttachment($attachment)) {
+            $imageUrl = $this->getImageUrl($attachment);
+
+            if (! $imageUrl) {
+                return;
+            }
+
+            PostContent::create([
+                'post_id' => $post->id,
+                'content_type' => 'image',
+                'content_path' => null,
+                'source_url' => $imageUrl,
+                'content_text' => null,
+            ]);
+        }
+    }
+
+    private function isVideoAttachment(array $attachment): bool
+    {
+        $type = strtolower($attachment['type'] ?? '');
+
+        if (str_contains($type, 'video')) {
+            return true;
+        }
+
+        return isset($attachment['media']['source']);
+    }
+
+    private function isImageAttachment(array $attachment): bool
+    {
+        $type = strtolower($attachment['type'] ?? '');
+
+        if (str_contains($type, 'photo') || str_contains($type, 'image')) {
+            return true;
+        }
+
+        return isset($attachment['media']['image']);
+    }
+
+    private function getVideoUrl(array $attachment): ?string
+    {
+        return $attachment['media']['source'] ?? $attachment['url'] ?? null;
+    }
+
+    private function getImageUrl(array $attachment): ?string
+    {
+        return $attachment['media']['image']['src']
+            ?? $attachment['media']['image']['url']
+            ?? $attachment['url']
+            ?? null;
     }
 
     public function retry(Post $post): Post

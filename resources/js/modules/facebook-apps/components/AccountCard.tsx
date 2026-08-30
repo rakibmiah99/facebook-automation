@@ -1,4 +1,7 @@
-import { ExternalLink, Users } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { ExternalLink, MoreVertical, RefreshCw, Users } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { route } from 'ziggy-js';
 import type { FacebookAppAccount } from '../types/facebook-app-account';
 
 interface AccountCardProps {
@@ -6,6 +9,27 @@ interface AccountCardProps {
 }
 
 export default function AccountCard({ account }: AccountCardProps) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [syncing, setSyncing] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const syncAllPosts = () => {
+        setMenuOpen(false);
+        router.post(
+            route('posts.sync-account', { facebookAppAccount: account.id }),
+            {},
+            { preserveScroll: true, onStart: () => setSyncing(true), onFinish: () => setSyncing(false) },
+        );
+    };
+
     return (
         <div
             className="rounded-xl p-5 transition-all duration-150"
@@ -28,26 +52,62 @@ export default function AccountCard({ account }: AccountCardProps) {
                     </div>
                 </div>
 
-                {account.link && (
-                    <a
-                        href={account.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open on Facebook"
-                        className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-100 flex-shrink-0"
-                        style={{ color: 'var(--color-muted)' }}
-                        onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
-                            (e.currentTarget as HTMLElement).style.color = 'var(--color-text)';
-                        }}
-                        onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.background = 'transparent';
-                            (e.currentTarget as HTMLElement).style.color = 'var(--color-muted)';
-                        }}
-                    >
-                        <ExternalLink size={14} />
-                    </a>
-                )}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {account.link && (
+                        <a
+                            href={account.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open on Facebook"
+                            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-100"
+                            style={{ color: 'var(--color-muted)' }}
+                            onMouseEnter={(e) => {
+                                (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
+                                (e.currentTarget as HTMLElement).style.color = 'var(--color-text)';
+                            }}
+                            onMouseLeave={(e) => {
+                                (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                (e.currentTarget as HTMLElement).style.color = 'var(--color-muted)';
+                            }}
+                        >
+                            <ExternalLink size={14} />
+                        </a>
+                    )}
+
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setMenuOpen((o) => !o)}
+                            title="Page actions"
+                            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-100"
+                            style={{ color: 'var(--color-muted)', background: menuOpen ? 'var(--color-surface-2)' : 'transparent' }}
+                            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)')}
+                            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = menuOpen ? 'var(--color-surface-2)' : 'transparent')}
+                        >
+                            <MoreVertical size={15} />
+                        </button>
+
+                        {menuOpen && (
+                            <div
+                                className="absolute right-0 top-full mt-1.5 w-48 rounded-xl shadow-2xl overflow-hidden z-20"
+                                style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-hover)' }}
+                            >
+                                <div className="p-1">
+                                    <button
+                                        onClick={syncAllPosts}
+                                        disabled={syncing}
+                                        className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-sm rounded-lg transition-colors duration-100"
+                                        style={{ color: 'var(--color-text)', opacity: syncing ? 0.6 : 1 }}
+                                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)')}
+                                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
+                                    >
+                                        <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
+                                        {syncing ? 'Syncing…' : 'Sync all posts'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <div className="flex items-center justify-between" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px' }}>

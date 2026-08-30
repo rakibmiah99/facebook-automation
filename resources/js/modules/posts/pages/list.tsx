@@ -1,14 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { CalendarClock, CheckCircle2, Clock, ExternalLink, FileText, ImageIcon, MessageCircle, Plus, RotateCw, Type, XCircle } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock, ExternalLink, FileText, ImageIcon, MessageCircle, Plus, RefreshCw, RotateCw, Type, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { route } from 'ziggy-js';
 import AppLayout from '../../../shared/layouts/AppLayout';
 import PostCommentsModal from '../components/PostCommentsModal';
-import type { Paginated, PostListItem } from '../types/post';
+import PostFilters from '../components/PostFilters';
+import type { Paginated, PostFilterAccount, PostFilters as PostFiltersType, PostListItem } from '../types/post';
 
 interface Props {
     data: {
         posts: Paginated<PostListItem>;
+        accounts: PostFilterAccount[];
+        filters: PostFiltersType;
     };
 }
 
@@ -27,8 +30,12 @@ function formatDateTime(value: string) {
 }
 
 export default function PostList({ data }: Props) {
-    const { posts } = data;
+    const { posts, accounts, filters } = data;
+    const hasActiveFilters = Boolean(
+        filters.page || filters.search || filters.date_from || filters.date_to || filters.status || (filters.post_type && filters.post_type !== 'all'),
+    );
     const [retryingId, setRetryingId] = useState<number | null>(null);
+    const [syncingId, setSyncingId] = useState<number | null>(null);
     const [viewingPostId, setViewingPostId] = useState<number | null>(null);
     const viewingPost = posts.data.find((p) => p.id === viewingPostId) ?? null;
 
@@ -37,6 +44,14 @@ export default function PostList({ data }: Props) {
             route('posts.retry', { post: postId }),
             {},
             { preserveScroll: true, onStart: () => setRetryingId(postId), onFinish: () => setRetryingId(null) },
+        );
+    };
+
+    const syncPost = (postId: number) => {
+        router.post(
+            route('posts.sync', { post: postId }),
+            {},
+            { preserveScroll: true, onStart: () => setSyncingId(postId), onFinish: () => setSyncingId(null) },
         );
     };
 
@@ -75,6 +90,8 @@ export default function PostList({ data }: Props) {
                         </div>
                     </div>
 
+                    <PostFilters filters={filters} accounts={accounts} />
+
                     {posts.data.length === 0 ? (
                         <div
                             className="flex flex-col items-center justify-center text-center rounded-xl p-16"
@@ -84,10 +101,12 @@ export default function PostList({ data }: Props) {
                                 <FileText size={22} style={{ color: 'var(--color-primary)' }} />
                             </div>
                             <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                                No posts yet
+                                {hasActiveFilters ? 'No posts match your filters' : 'No posts yet'}
                             </h2>
                             <p className="text-xs mt-1 max-w-xs" style={{ color: 'var(--color-muted)' }}>
-                                Create your first text or image post to see it listed here.
+                                {hasActiveFilters
+                                    ? 'Try adjusting or resetting the filters above.'
+                                    : 'Create your first text or image post to see it listed here.'}
                             </p>
                             <div className="flex items-center gap-2 mt-4">
                                 <Link
@@ -203,6 +222,26 @@ export default function PostList({ data }: Props) {
                                                                 }}
                                                             >
                                                                 <MessageCircle size={14} />
+                                                            </button>
+                                                        )}
+                                                        {post.post_id && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => syncPost(post.id)}
+                                                                disabled={syncingId === post.id}
+                                                                title="Sync this post from Facebook"
+                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-100"
+                                                                style={{ color: 'var(--color-muted)', opacity: syncingId === post.id ? 0.6 : 1 }}
+                                                                onMouseEnter={(e) => {
+                                                                    (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
+                                                                    (e.currentTarget as HTMLElement).style.color = 'var(--color-text)';
+                                                                }}
+                                                                onMouseLeave={(e) => {
+                                                                    (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                                                    (e.currentTarget as HTMLElement).style.color = 'var(--color-muted)';
+                                                                }}
+                                                            >
+                                                                <RefreshCw size={14} className={syncingId === post.id ? 'animate-spin' : undefined} />
                                                             </button>
                                                         )}
                                                         {facebookUrl && (
