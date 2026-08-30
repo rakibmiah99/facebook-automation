@@ -110,10 +110,6 @@ export default function TemplatePreview({ config, width, height, values, imagePr
             )}
 
             {config.fields?.map((field) => {
-                if (field.hidden && !revealHidden) {
-                    return null;
-                }
-
                 const style = scaledStyle(field.style, scale);
                 const hiddenOutline: React.CSSProperties = field.hidden && revealHidden
                     ? { outline: '1px dashed var(--color-warning)', outlineOffset: 2 }
