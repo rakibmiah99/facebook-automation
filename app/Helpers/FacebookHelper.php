@@ -18,6 +18,11 @@ class FacebookHelper implements FacebookRepositoryInterface
      */
     private const POST_FIELDS = 'id,message,created_time,permalink_url,attachments';
 
+    /**
+     * Fields requested when reading comments back from the Graph API.
+     */
+    private const COMMENT_FIELDS = 'id,message,from{id,name},created_time,attachment';
+
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.facebook.base_url'), '/').'/'.config('services.facebook.version');
@@ -95,15 +100,15 @@ class FacebookHelper implements FacebookRepositoryInterface
         return $response->json();
     }
 
-    public function createComment(string $pageAccessToken, string $postId, ?string $message = null, ?string $attachmentUrl = null): array
+    public function createComment(string $pageAccessToken, string $objectId, ?string $message = null, ?string $attachmentUrl = null): array
     {
-        $response = Http::withToken($pageAccessToken)->post("{$this->baseUrl}/{$postId}/comments", array_filter([
+        $response = Http::withToken($pageAccessToken)->post("{$this->baseUrl}/{$objectId}/comments", array_filter([
             'message' => $message,
             'attachment_url' => $attachmentUrl,
         ]));
 
         if ($response->failed()) {
-            $this->logFailure("{$postId}/comments", $response, ['post_id' => $postId]);
+            $this->logFailure("{$objectId}/comments", $response, ['object_id' => $objectId]);
 
             throw new RuntimeException(
                 $response->json('error.message') ?? 'Failed to publish the comment to Facebook.'
@@ -161,6 +166,40 @@ class FacebookHelper implements FacebookRepositoryInterface
         }
 
         return $response->json();
+    }
+
+    public function getPostComments(string $pageAccessToken, string $postId): array
+    {
+        $url = "{$this->baseUrl}/{$postId}/comments";
+        $params = [
+            'fields' => self::COMMENT_FIELDS,
+            // 'stream' returns every comment and reply in one flat, chronological list.
+            'filter' => 'stream',
+            'limit' => 100,
+        ];
+
+        $comments = [];
+
+        do {
+            $response = Http::withToken($pageAccessToken)->timeout(30)->get($url, $params);
+
+            if ($response->failed()) {
+                $this->logFailure("{$postId}/comments", $response, ['post_id' => $postId]);
+
+                throw new RuntimeException(
+                    $response->json('error.message') ?? 'Failed to fetch comments from Facebook.'
+                );
+            }
+
+            $data = $response->json();
+
+            array_push($comments, ...($data['data'] ?? []));
+
+            $url = $data['paging']['next'] ?? null;
+            $params = [];
+        } while ($url);
+
+        return $comments;
     }
 
     /**

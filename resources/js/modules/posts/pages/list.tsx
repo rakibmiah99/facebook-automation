@@ -1,5 +1,19 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { CalendarClock, CheckCircle2, Clock, ExternalLink, FileText, ImageIcon, MessageCircle, Plus, RefreshCw, RotateCw, Type, XCircle } from 'lucide-react';
+import {
+    CalendarClock,
+    CheckCircle2,
+    Clock,
+    ExternalLink,
+    FileText,
+    ImageIcon,
+    MessageCircle,
+    MessagesSquare,
+    Plus,
+    RefreshCw,
+    RotateCw,
+    Type,
+    XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 import { route } from 'ziggy-js';
 import AppLayout from '../../../shared/layouts/AppLayout';
@@ -36,6 +50,7 @@ export default function PostList({ data }: Props) {
     );
     const [retryingId, setRetryingId] = useState<number | null>(null);
     const [syncingId, setSyncingId] = useState<number | null>(null);
+    const [syncingCommentsId, setSyncingCommentsId] = useState<number | null>(null);
     const [viewingPostId, setViewingPostId] = useState<number | null>(null);
     const viewingPost = posts.data.find((p) => p.id === viewingPostId) ?? null;
 
@@ -52,6 +67,14 @@ export default function PostList({ data }: Props) {
             route('posts.sync', { post: postId }),
             {},
             { preserveScroll: true, onStart: () => setSyncingId(postId), onFinish: () => setSyncingId(null) },
+        );
+    };
+
+    const syncComments = (postId: number) => {
+        router.post(
+            route('posts.comments.sync', { post: postId }),
+            {},
+            { onStart: () => setSyncingCommentsId(postId), onFinish: () => setSyncingCommentsId(null) },
         );
     };
 
@@ -242,6 +265,26 @@ export default function PostList({ data }: Props) {
                                                                 }}
                                                             >
                                                                 <RefreshCw size={14} className={syncingId === post.id ? 'animate-spin' : undefined} />
+                                                            </button>
+                                                        )}
+                                                        {post.post_id && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => syncComments(post.id)}
+                                                                disabled={syncingCommentsId === post.id}
+                                                                title="Sync comments from Facebook"
+                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-100"
+                                                                style={{ color: 'var(--color-muted)', opacity: syncingCommentsId === post.id ? 0.6 : 1 }}
+                                                                onMouseEnter={(e) => {
+                                                                    (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
+                                                                    (e.currentTarget as HTMLElement).style.color = 'var(--color-text)';
+                                                                }}
+                                                                onMouseLeave={(e) => {
+                                                                    (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                                                    (e.currentTarget as HTMLElement).style.color = 'var(--color-muted)';
+                                                                }}
+                                                            >
+                                                                <MessagesSquare size={14} className={syncingCommentsId === post.id ? 'animate-pulse' : undefined} />
                                                             </button>
                                                         )}
                                                         {facebookUrl && (

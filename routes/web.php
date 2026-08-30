@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CustomTemplateRequestController as AdminCustomTemplateRequestController;
 use App\Http\Controllers\Admin\TemplateController as AdminTemplateController;
+use App\Http\Controllers\CommentReplyController;
 use App\Http\Controllers\CustomTemplateRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacebookAppAccountController;
@@ -40,7 +41,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/posts/{post}/sync', [PostController::class, 'sync'])->name('posts.sync');
     Route::post('/posts/sync/{facebookAppAccount}', [PostController::class, 'syncAccount'])->name('posts.sync-account');
 
+    Route::get('/posts/{post}/comments', [PostCommentController::class, 'index'])->name('posts.comments.index');
+    Route::post('/posts/{post}/comments/sync', [PostCommentController::class, 'sync'])->name('posts.comments.sync');
     Route::post('/posts/comments/{postComment}/retry', [PostCommentController::class, 'retry'])->name('posts.comments.retry');
+
+    Route::post('/posts/{post}/comments/reply-all', [CommentReplyController::class, 'replyToAll'])->name('posts.comments.reply-all');
+    Route::post('/posts/comments/{postComment}/replies', [CommentReplyController::class, 'store'])->name('posts.comments.replies.store');
+    Route::post('/posts/comments/replies/{commentReply}/retry', [CommentReplyController::class, 'retry'])->name('posts.comments.replies.retry');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/{template}/edit', [TemplateController::class, 'edit'])->name('templates.edit');

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Helpers\UtilsHelper;
+use App\Models\Post;
 use App\Models\PostComment;
 use App\Repositories\FacebookRepositoryInterface;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +14,102 @@ class PostCommentService
     public function __construct(
         private FacebookRepositoryInterface $facebookRepository,
     ) {
+    }
+
+    public function index(Post $post): array
+    {
+        abort_unless($post->user_id === Auth::id(), 403);
+
+        return [
+            'post' => $post->load('facebookAppAccount:id,account_name,link'),
+            'comments' => $post->comments()->with('replies')->orderByDesc('commented_at')->orderByDesc('created_at')->get(),
+        ];
+    }
+
+    /**
+     * Pull every comment (and reply) left on a post's Facebook post into the local database.
+     *
+     * @return array{total: int, created: int, updated: int}
+     */
+    public function syncComments(Post $post): array
+    {
+        abort_unless($post->user_id === Auth::id(), 403);
+
+        if (! $post->post_id) {
+            throw new RuntimeException('This post has not been published to Facebook yet and cannot be synced.');
+        }
+
+        $post->loadMissing('facebookAppAccount');
+        $account = $post->facebookAppAccount;
+
+        if (! $account) {
+            throw new RuntimeException('This post is missing its Facebook Page account and cannot be synced.');
+        }
+
+        $facebookComments = $this->facebookRepository->getPostComments($account->access_token, $post->post_id);
+
+        $summary = ['total' => 0, 'created' => 0, 'updated' => 0];
+
+        foreach ($facebookComments as $facebookComment) {
+            $result = $this->syncSingleComment($post, $facebookComment);
+
+            if (! $result) {
+                continue;
+            }
+
+            $summary['total']++;
+            $summary[$result]++;
+        }
+
+        return $summary;
+    }
+
+    private function syncSingleComment(Post $post, array $facebookComment): ?string
+    {
+        $facebookCommentId = $facebookComment['id'] ?? null;
+
+        if (! $facebookCommentId) {
+            return null;
+        }
+
+        $comment = PostComment::query()
+            ->where('post_id', $post->id)
+            ->where('comment_id', $facebookCommentId)
+            ->first();
+
+        $isNew = ! $comment;
+
+        if (! $comment) {
+            $comment = new PostComment([
+                'post_id' => $post->id,
+                'comment_id' => $facebookCommentId,
+            ]);
+        }
+
+        $comment->fill([
+            'message' => $facebookComment['message'] ?? null,
+            'commenter_id' => $facebookComment['from']['id'] ?? null,
+            'commenter_name' => $facebookComment['from']['name'] ?? null,
+            'commented_at' => $this->parseFacebookDate($facebookComment['created_time'] ?? null),
+            'image_source_url' => $facebookComment['attachment']['media']['image']['src'] ?? null,
+        ]);
+
+        $comment->save();
+
+        return $isNew ? 'created' : 'updated';
+    }
+
+    private function parseFacebookDate(?string $createdTime): ?string
+    {
+        if (! $createdTime) {
+            return null;
+        }
+
+        try {
+            return date('Y-m-d H:i:s', strtotime($createdTime));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function retry(PostComment $comment): PostComment

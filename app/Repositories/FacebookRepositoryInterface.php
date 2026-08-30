@@ -33,11 +33,13 @@ interface FacebookRepositoryInterface
     public function createImagePost(string $pageAccessToken, string $pageId, string $imageUrl, ?string $caption = null): array;
 
     /**
-     * Comment on a Facebook post.
+     * Comment on a Facebook post or comment. Facebook exposes both under the same
+     * `/{object-id}/comments` edge, so $objectId may be a post id (top-level comment)
+     * or a comment id (reply).
      *
      * @return array{id: string}
      */
-    public function createComment(string $pageAccessToken, string $postId, ?string $message = null, ?string $attachmentUrl = null): array;
+    public function createComment(string $pageAccessToken, string $objectId, ?string $message = null, ?string $attachmentUrl = null): array;
 
     /**
      * Get every post published to a Facebook Page, following pagination automatically.
@@ -52,4 +54,11 @@ interface FacebookRepositoryInterface
      * @return array{id: string, message?: string, created_time?: string, permalink_url?: string, attachments?: array}
      */
     public function getPost(string $pageAccessToken, string $postId): array;
+
+    /**
+     * Get every comment (including replies) left on a Facebook post, following pagination automatically.
+     *
+     * @return array<int, array{id: string, message?: string, from?: array{id: string, name: string}, created_time?: string, attachment?: array}>
+     */
+    public function getPostComments(string $pageAccessToken, string $postId): array;
 }

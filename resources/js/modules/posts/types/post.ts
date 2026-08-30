@@ -59,3 +59,14 @@ export interface PostFilters {
     status: PostStatusFilter | null;
     post_type: PostTypeFilter;
 }
+
+export interface PostCommentsPagePost {
+    id: number;
+    post_id: string | null;
+    post_type: string;
+    facebook_app_account: {
+        id: number;
+        account_name: string;
+        link: string | null;
+    } | null;
+}
