@@ -18,3 +18,8 @@ export interface PostCommentItem {
     created_at: string;
     replies: CommentReplyItem[];
 }
+
+export interface PostCommentFilters {
+    commenter: string | null;
+    message: string | null;
+}

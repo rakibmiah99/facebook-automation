@@ -3,14 +3,16 @@ import { ArrowLeft, Clock, ExternalLink, MessageCircle, RefreshCw, Send, User, U
 import { useState } from 'react';
 import { route } from 'ziggy-js';
 import AppLayout from '../../../shared/layouts/AppLayout';
+import CommentFilters from '../components/CommentFilters';
 import CommentReplyBox from '../components/CommentReplyBox';
 import type { PostCommentsPagePost } from '../types/post';
-import type { PostCommentItem } from '../types/post-comment';
+import type { PostCommentFilters, PostCommentItem } from '../types/post-comment';
 
 interface Props {
     data: {
         post: PostCommentsPagePost;
         comments: PostCommentItem[];
+        filters: PostCommentFilters;
     };
 }
 
@@ -19,7 +21,7 @@ function formatDateTime(value: string) {
 }
 
 export default function PostComments({ data }: Props) {
-    const { post, comments } = data;
+    const { post, comments, filters } = data;
     const [syncing, setSyncing] = useState(false);
     const [replyAllMessage, setReplyAllMessage] = useState('');
     const [replyingAll, setReplyingAll] = useState(false);
@@ -74,22 +76,26 @@ export default function PostComments({ data }: Props) {
                             </p>
                         </div>
 
-                        {post.post_id && (
-                            <button
-                                onClick={syncComments}
-                                disabled={syncing}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-                                style={{
-                                    background: 'var(--color-primary)',
-                                    color: 'white',
-                                    fontFamily: 'var(--font-display)',
-                                    opacity: syncing ? 0.6 : 1,
-                                }}
-                            >
-                                <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
-                                {syncing ? 'Syncing…' : 'Sync Comments'}
-                            </button>
-                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <CommentFilters postId={post.id} filters={filters} />
+
+                            {post.post_id && (
+                                <button
+                                    onClick={syncComments}
+                                    disabled={syncing}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+                                    style={{
+                                        background: 'var(--color-primary)',
+                                        color: 'white',
+                                        fontFamily: 'var(--font-display)',
+                                        opacity: syncing ? 0.6 : 1,
+                                    }}
+                                >
+                                    <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
+                                    {syncing ? 'Syncing…' : 'Sync Comments'}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {post.post_id && comments.length > 0 && (
@@ -139,12 +145,14 @@ export default function PostComments({ data }: Props) {
                                 <MessageCircle size={22} style={{ color: 'var(--color-primary)' }} />
                             </div>
                             <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                                No comments yet
+                                {filters.commenter || filters.message ? 'No comments match your search' : 'No comments yet'}
                             </h2>
                             <p className="text-xs mt-1 max-w-xs" style={{ color: 'var(--color-muted)' }}>
-                                {post.post_id
-                                    ? 'Click "Sync Comments" to pull the latest comments from Facebook.'
-                                    : 'This post has not been published to Facebook yet.'}
+                                {filters.commenter || filters.message
+                                    ? 'Try adjusting or resetting the search filters above.'
+                                    : post.post_id
+                                      ? 'Click "Sync Comments" to pull the latest comments from Facebook.'
+                                      : 'This post has not been published to Facebook yet.'}
                             </p>
                         </div>
                     ) : (

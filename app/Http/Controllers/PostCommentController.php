@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\PostCommentIndexRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Services\PostCommentService;
@@ -17,9 +18,9 @@ class PostCommentController extends Controller
     ) {
     }
 
-    public function index(Post $post): Response
+    public function index(PostCommentIndexRequest $request, Post $post): Response
     {
-        $data = $this->postCommentService->index($post);
+        $data = $this->postCommentService->index($post, $request->validated());
 
         return Inertia::render('posts/pages/comments', [
             'data' => $data,

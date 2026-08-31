@@ -16,13 +16,25 @@ class PostCommentService
     ) {
     }
 
-    public function index(Post $post): array
+    public function index(Post $post, array $filters = []): array
     {
         abort_unless($post->user_id === Auth::id(), 403);
 
+        $comments = $post->comments()
+            ->with('replies')
+            ->when($filters['commenter'] ?? null, fn ($query, $commenter) => $query->where('commenter_name', 'like', "%{$commenter}%"))
+            ->when($filters['message'] ?? null, fn ($query, $message) => $query->where('message', 'like', "%{$message}%"))
+            ->orderByDesc('commented_at')
+            ->orderByDesc('created_at')
+            ->get();
+
         return [
             'post' => $post->load('facebookAppAccount:id,account_name,link'),
-            'comments' => $post->comments()->with('replies')->orderByDesc('commented_at')->orderByDesc('created_at')->get(),
+            'comments' => $comments,
+            'filters' => [
+                'commenter' => $filters['commenter'] ?? null,
+                'message' => $filters['message'] ?? null,
+            ],
         ];
     }
 
