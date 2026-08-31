@@ -56,8 +56,19 @@ export default function PostList({ data }: Props) {
     const [retryingId, setRetryingId] = useState<number | null>(null);
     const [syncingId, setSyncingId] = useState<number | null>(null);
     const [syncingCommentsId, setSyncingCommentsId] = useState<number | null>(null);
+    const [syncingAccount, setSyncingAccount] = useState(false);
     const [viewingPostId, setViewingPostId] = useState<number | null>(null);
     const viewingPost = posts.data.find((p) => p.id === viewingPostId) ?? null;
+
+    const syncAccountPosts = () => {
+        if (!filters.account_id) return;
+
+        router.post(
+            route('posts.sync-account', { facebookAppAccount: filters.account_id }),
+            {},
+            { preserveScroll: true, preserveState: true, onStart: () => setSyncingAccount(true), onFinish: () => setSyncingAccount(false) },
+        );
+    };
 
     const retryPost = (postId: number) => {
         router.post(
@@ -99,6 +110,23 @@ export default function PostList({ data }: Props) {
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
+                            {filters.account_id && (
+                                <button
+                                    type="button"
+                                    onClick={syncAccountPosts}
+                                    disabled={syncingAccount}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+                                    style={{
+                                        background: 'var(--color-surface-2)',
+                                        border: '1px solid var(--color-border)',
+                                        color: 'var(--color-text)',
+                                        opacity: syncingAccount ? 0.6 : 1,
+                                    }}
+                                >
+                                    <RefreshCw size={14} className={syncingAccount ? 'animate-spin' : undefined} />
+                                    {syncingAccount ? 'Syncing…' : 'Sync Posts'}
+                                </button>
+                            )}
                             <Link
                                 href={route('posts.image')}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
@@ -137,6 +165,23 @@ export default function PostList({ data }: Props) {
                                     : 'Create your first text or image post to see it listed here.'}
                             </p>
                             <div className="flex items-center gap-2 mt-4">
+                                {filters.account_id && (
+                                    <button
+                                        type="button"
+                                        onClick={syncAccountPosts}
+                                        disabled={syncingAccount}
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+                                        style={{
+                                            background: 'var(--color-surface-2)',
+                                            border: '1px solid var(--color-border)',
+                                            color: 'var(--color-text)',
+                                            opacity: syncingAccount ? 0.6 : 1,
+                                        }}
+                                    >
+                                        <RefreshCw size={14} className={syncingAccount ? 'animate-spin' : undefined} />
+                                        {syncingAccount ? 'Syncing…' : 'Sync Posts'}
+                                    </button>
+                                )}
                                 <Link
                                     href={route('posts.image')}
                                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"

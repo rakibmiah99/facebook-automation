@@ -85,14 +85,10 @@ class PostController extends Controller
         try {
             $summary = $this->postService->syncAccountPosts($facebookAppAccount);
         } catch (RuntimeException $exception) {
-            return redirect()
-                ->route('facebook-app-accounts.index', $facebookAppAccount->facebook_app_id)
-                ->with('error', $exception->getMessage());
+            return back()->with('error', $exception->getMessage());
         }
 
-        return redirect()
-            ->route('facebook-app-accounts.index', $facebookAppAccount->facebook_app_id)
-            ->with('success', "Synced {$summary['total']} post(s) — {$summary['created']} new, {$summary['updated']} updated.");
+        return back()->with('success', "Synced {$summary['total']} post(s) — {$summary['created']} new, {$summary['updated']} updated.");
     }
 
     public function sync(Post $post): RedirectResponse
