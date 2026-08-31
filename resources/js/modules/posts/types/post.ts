@@ -52,7 +52,7 @@ export type PostStatusFilter = 'published' | 'scheduled' | 'failed';
 export type PostTypeFilter = 'all' | 'text' | 'image';
 
 export interface PostFilters {
-    page: string | null;
+    account_id: string | null;
     search: string | null;
     date_from: string | null;
     date_to: string | null;

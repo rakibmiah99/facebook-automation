@@ -62,7 +62,7 @@ export default function PostFilters({ filters, accounts }: Props) {
         router.get(
             route('posts.index'),
             {
-                page: next.page || undefined,
+                account_id: next.account_id || undefined,
                 search: next.search || undefined,
                 date_from: next.date_from || undefined,
                 date_to: next.date_to || undefined,
@@ -74,7 +74,7 @@ export default function PostFilters({ filters, accounts }: Props) {
     };
 
     const hasActiveFilters =
-        Boolean(filters.page) ||
+        Boolean(filters.account_id) ||
         Boolean(filters.search) ||
         Boolean(filters.date_from) ||
         Boolean(filters.date_to) ||
@@ -119,8 +119,8 @@ export default function PostFilters({ filters, accounts }: Props) {
                     Page
                 </label>
                 <select
-                    value={filters.page ?? ''}
-                    onChange={(e) => submit({ page: e.target.value || null })}
+                    value={filters.account_id ?? ''}
+                    onChange={(e) => submit({ account_id: e.target.value || null })}
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
                     style={selectStyle}
                     onFocus={(e) => applyFocusStyle(e.currentTarget)}

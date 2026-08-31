@@ -15,7 +15,7 @@ class PostIndexRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'page' => [
+            'account_id' => [
                 'nullable', 'integer',
                 Rule::exists('facebook_app_accounts', 'id')->where('user_id', $this->user()->id),
             ],

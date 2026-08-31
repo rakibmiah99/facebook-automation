@@ -46,7 +46,12 @@ function formatDateTime(value: string) {
 export default function PostList({ data }: Props) {
     const { posts, accounts, filters } = data;
     const hasActiveFilters = Boolean(
-        filters.page || filters.search || filters.date_from || filters.date_to || filters.status || (filters.post_type && filters.post_type !== 'all'),
+        filters.account_id ||
+            filters.search ||
+            filters.date_from ||
+            filters.date_to ||
+            filters.status ||
+            (filters.post_type && filters.post_type !== 'all'),
     );
     const [retryingId, setRetryingId] = useState<number | null>(null);
     const [syncingId, setSyncingId] = useState<number | null>(null);

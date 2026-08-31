@@ -40,7 +40,7 @@ class PostService
 
         $posts = Post::query()
             ->where('user_id', Auth::id())
-            ->when($filters['page'] ?? null, fn ($query, $page) => $query->where('facebook_app_account_id', $page))
+            ->when($filters['account_id'] ?? null, fn ($query, $accountId) => $query->where('facebook_app_account_id', $accountId))
             ->when($filters['search'] ?? null, function ($query, $search) {
                 $query->whereHas('content', fn ($contentQuery) => $contentQuery->where('content_text', 'like', "%{$search}%"));
             })
@@ -67,7 +67,7 @@ class PostService
                 ->orderBy('account_name')
                 ->get(['id', 'account_name']),
             'filters' => [
-                'page' => $filters['page'] ?? null,
+                'account_id' => $filters['account_id'] ?? null,
                 'search' => $filters['search'] ?? null,
                 'date_from' => $filters['date_from'] ?? null,
                 'date_to' => $filters['date_to'] ?? null,
