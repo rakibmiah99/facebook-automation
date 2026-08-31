@@ -25,6 +25,16 @@ class FacebookHelper implements FacebookRepositoryInterface
      */
     private const COMMENT_FIELDS = 'id,message,from{id,name},created_time,attachment,parent{id}';
 
+    /**
+     * Fields requested when listing a Page's Messenger conversations.
+     */
+    private const CONVERSATION_FIELDS = 'participants,snippet,unread_count,updated_time,message_count,link';
+
+    /**
+     * Fields requested when reading a conversation's messages back from the Graph API.
+     */
+    private const MESSAGE_FIELDS = 'id,message,from,created_time,attachments{mime_type,name,image_data,video_data,file_url}';
+
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.facebook.base_url'), '/').'/'.config('services.facebook.version');
@@ -202,6 +212,96 @@ class FacebookHelper implements FacebookRepositoryInterface
         } while ($url);
 
         return $comments;
+    }
+
+    public function getPageConversations(string $pageAccessToken, string $pageId): array
+    {
+        $url = "{$this->baseUrl}/{$pageId}/conversations";
+        $params = [
+            'fields' => self::CONVERSATION_FIELDS,
+            'platform' => 'messenger',
+            'limit' => 100,
+        ];
+
+        $conversations = [];
+
+        do {
+            $response = Http::withToken($pageAccessToken)->timeout(30)->get($url, $params);
+
+            if ($response->failed()) {
+                $this->logFailure("{$pageId}/conversations", $response, ['page_id' => $pageId]);
+
+                throw new RuntimeException(
+                    $response->json('error.message') ?? 'Failed to fetch conversations from Facebook.'
+                );
+            }
+
+            $data = $response->json();
+
+            array_push($conversations, ...($data['data'] ?? []));
+
+            $url = $data['paging']['next'] ?? null;
+            $params = [];
+        } while ($url);
+
+        return $conversations;
+    }
+
+    public function getConversationMessages(string $pageAccessToken, string $conversationId): array
+    {
+        $url = "{$this->baseUrl}/{$conversationId}/messages";
+        $params = [
+            'fields' => self::MESSAGE_FIELDS,
+            'limit' => 100,
+        ];
+
+        $messages = [];
+
+        do {
+            $response = Http::withToken($pageAccessToken)->timeout(30)->get($url, $params);
+
+            if ($response->failed()) {
+                $this->logFailure("{$conversationId}/messages", $response, ['conversation_id' => $conversationId]);
+
+                throw new RuntimeException(
+                    $response->json('error.message') ?? 'Failed to fetch messages from Facebook.'
+                );
+            }
+
+            $data = $response->json();
+
+            array_push($messages, ...($data['data'] ?? []));
+
+            $url = $data['paging']['next'] ?? null;
+            $params = [];
+        } while ($url);
+
+        return $messages;
+    }
+
+    public function sendMessage(string $pageAccessToken, string $pageId, string $recipientId, ?string $message = null, ?string $attachmentUrl = null): array
+    {
+        $messagePayload = $attachmentUrl
+            ? ['attachment' => ['type' => 'image', 'payload' => ['url' => $attachmentUrl]]]
+            : ['text' => $message];
+
+        // The Send API needs a genuine JSON body with nested `recipient`/`message` objects —
+        // unlike createComment()/createTextPost() above, form-encoding this will not work.
+        $response = Http::asJson()->withToken($pageAccessToken)->post("{$this->baseUrl}/{$pageId}/messages", [
+            'recipient' => ['id' => $recipientId],
+            'messaging_type' => 'RESPONSE',
+            'message' => $messagePayload,
+        ]);
+
+        if ($response->failed()) {
+            $this->logFailure("{$pageId}/messages", $response, ['page_id' => $pageId, 'recipient_id' => $recipientId]);
+
+            throw new RuntimeException(
+                $response->json('error.message') ?? 'Failed to send the message to Facebook.'
+            );
+        }
+
+        return $response->json();
     }
 
     /**

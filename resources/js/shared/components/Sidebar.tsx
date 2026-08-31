@@ -12,6 +12,7 @@ import {
     LayoutGrid,
     LayoutTemplate,
     List,
+    MessagesSquare,
     Send,
     Settings,
     ShieldCheck,
@@ -53,6 +54,7 @@ function buildNavItems(isAdmin: boolean): { group: string; items: NavItem[] }[] 
             items: [
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, routeName: 'dashboard.index' },
                 { id: 'facebook-apps', label: 'My Apps', icon: Facebook, routeName: 'facebook-apps.index' },
+                { id: 'conversations', label: 'Conversation', icon: MessagesSquare, routeName: 'conversations.index' },
                 {
                     id: 'post',
                     label: 'Post',

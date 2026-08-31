@@ -61,4 +61,25 @@ interface FacebookRepositoryInterface
      * @return array<int, array{id: string, message?: string, from?: array{id: string, name: string}, created_time?: string, attachment?: array, parent?: array{id: string}}>
      */
     public function getPostComments(string $pageAccessToken, string $postId): array;
+
+    /**
+     * Get every Messenger conversation for a Page, following pagination automatically.
+     *
+     * @return array<int, array{id: string, snippet?: string, unread_count?: int, updated_time?: string, message_count?: int, link?: string, participants?: array{data: array<int, array{id: string, name?: string, email?: string}>}}>
+     */
+    public function getPageConversations(string $pageAccessToken, string $pageId): array;
+
+    /**
+     * Get every message in a conversation, following pagination automatically.
+     *
+     * @return array<int, array{id: string, message?: string, from?: array{id: string, name?: string}, created_time?: string, attachments?: array{data: array<int, array{mime_type?: string, image_data?: array, video_data?: array, file_url?: string}>}}>
+     */
+    public function getConversationMessages(string $pageAccessToken, string $conversationId): array;
+
+    /**
+     * Send a Messenger message from a Page to a participant (Send API).
+     *
+     * @return array{recipient_id: string, message_id: string}
+     */
+    public function sendMessage(string $pageAccessToken, string $pageId, string $recipientId, ?string $message = null, ?string $attachmentUrl = null): array;
 }

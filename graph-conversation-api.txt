@@ -1,0 +1,422 @@
+# Facebook Page Inbox (Conversations) — Implementation Plan
+
+Planning document only — no code has been written yet. This describes how to add a
+"Conversation" feature (Facebook Page Messenger inbox) using the Graph API v26,
+following the architecture and conventions already established in `project-guide.txt`
+and mirrored from the existing Posts / Post Comments modules in this codebase.
+
+Scope: pull conversations + messages on demand via "Sync" buttons, and send replies
+from the app. **Webhooks are explicitly out of scope for this pass** — see section 9.
+
+---
+
+## 1. Domain Model / Terminology (matches existing app vocabulary)
+
+- **Facebook Account** = a connected `FacebookApp` record (what the sidebar already
+  calls "My Apps" — one Facebook Login/OAuth connection, holding the long-lived user
+  token). A user can connect multiple of these.
+- **Page** = a `FacebookAppAccount` record — one of the Pages returned under a
+  `FacebookApp` (already has `account_id` = Facebook Page ID, `access_token` = Page
+  access token, `account_name`, `link`).
+- **Conversation** = one Messenger thread between a Page and a single participant
+  (person who messaged the Page).
+- **Conversation Message** = one message inside a conversation, either sent by the
+  Page or received from the participant.
+
+This reuses the exact same "App → Pages" relationship already powering
+`facebook-apps/pages/accounts.tsx`, so the new top switcher is not a new concept —
+just a different presentation of `FacebookApp::accounts()`.
+
+---
+
+## 2. Database Design
+
+Two new tables, following the same shape/conventions as `post_comments` /
+`comment_replies` (before their merge): plain columns, no DB-level unique constraint
+on the Facebook id (dedupe happens in the service layer via `firstOrNew`, same as
+`PostCommentService::syncSingleComment`), FK cascade deletes, `Fillable`/`Appends`
+attributes on the models.
+
+### 2.1 `conversations` table
+
+Migration: `database/migrations/2026_09_01_000001_create_conversations_table.php`
+
+| Column                  | Type                        | Notes |
+|--------------------------|------------------------------|-------|
+| `id`                     | bigint pk                    | |
+| `facebook_app_account_id`| unsignedBigInteger, FK → `facebook_app_accounts.id` cascade | the Page this thread belongs to |
+| `conversation_id`        | string, indexed              | Facebook thread id, e.g. `t_1234567890` |
+| `participant_id`         | string, nullable             | PSID of the other participant (the Page's own id is excluded when parsing `participants`) |
+| `participant_name`       | string, nullable             | |
+| `participant_email`      | string, nullable             | Graph sometimes returns this for Messenger participants |
+| `snippet`                | string, nullable             | Facebook's last-message preview text |
+| `unread_count`           | unsignedInteger, default 0   | |
+| `message_count`          | unsignedInteger, nullable    | |
+| `link`                   | string(1000), nullable       | permalink into the Page's inbox on facebook.com |
+| `conversation_updated_at`| datetime, nullable           | Facebook's `updated_time` — used to sort the conversation list; kept distinct from our own `updated_at` |
+| `created_at` / `updated_at` | timestamps                | |
+
+### 2.2 `conversation_messages` table
+
+Migration: `database/migrations/2026_09_01_000002_create_conversation_messages_table.php`
+
+| Column                | Type                          | Notes |
+|------------------------|--------------------------------|-------|
+| `id`                   | bigint pk                      | |
+| `conversation_id`      | unsignedBigInteger, FK → `conversations.id` cascade | |
+| `message_id`           | string, nullable, indexed      | Facebook's message id; **null until Send API confirms it**, exactly like `post_comments.comment_id` being null for a failed/pending comment — keeps outbound messages retryable |
+| `is_from_page`         | boolean, default false         | `true` when `from.id` on the Graph payload equals the Page's `account_id`; `false` for the participant |
+| `sender_id`            | string, nullable               | |
+| `sender_name`          | string, nullable               | |
+| `message`              | text, nullable                 | |
+| `attachment_path`      | string(1000), nullable         | local upload path when the Page attaches media to an outbound message — same convention as `post_comments.attachment_path`, uploaded via the existing `MediaHelperRepositoryInterface` |
+| `attachment_source_url`| string(2000), nullable         | Facebook-hosted attachment URL for an inbound message — same convention as `post_comments.image_source_url` |
+| `attachment_type`      | string, nullable               | `image` / `video` / `audio` / `file`, taken from the Graph `attachments` payload |
+| `sent_at`              | datetime, nullable             | Facebook's `created_time` for the message |
+| `created_at` / `updated_at` | timestamps                | |
+
+### 2.3 Model relations to add/extend
+
+- `FacebookAppAccount::conversations(): HasMany` → `Conversation`.
+- `Conversation::facebookAppAccount(): BelongsTo`, `Conversation::messages(): HasMany`
+  (ordered by `sent_at`).
+- `ConversationMessage::conversation(): BelongsTo`.
+- `ConversationMessage` gets an `attachment_url` appended accessor identical in shape
+  to `PostComment::attachmentUrl()`:
+  `attachment_path ? $mediaHelper-style-url : attachment_source_url`.
+
+No `user_id` column on either table — ownership is derived the same way `PostComment`
+does it through `Post`: `Conversation` → `facebookAppAccount->user_id`.
+
+---
+
+## 3. Facebook Graph API v26 Endpoints
+
+All calls reuse `FacebookHelper::$baseUrl` (already resolves to
+`config('services.facebook.base_url') . '/' . config('services.facebook.version')`,
+and `.env`'s `FACEBOOK_GRAPH_VERSION` already defaults to `v26.0` — no config changes
+needed).
+
+### 3.1 List a Page's conversations
+
+```
+GET /{page-id}/conversations
+  ?fields=participants,snippet,unread_count,updated_time,message_count,link
+  &platform=messenger
+  &limit=100
+  access_token=<page access token>
+```
+
+- `platform=messenger` scopes this to Messenger threads only (a Page can also have
+  Instagram DMs surfaced on the same edge if IG is linked — excluded for this pass).
+- Paginate via `paging.next`, same loop pattern as `getPagePosts` / `getPostComments`.
+- `participants.data` is an array of `{id, name, email?}` including the Page itself —
+  the "other" participant is whichever entry's `id` != the Page's `account_id`.
+
+### 3.2 List a conversation's messages
+
+```
+GET /{conversation-id}/messages
+  ?fields=id,message,from,to,created_time,attachments{mime_type,name,image_data,video_data,file_url}
+  &limit=100
+  access_token=<page access token>
+```
+
+- Paginate via `paging.next`, same loop pattern as existing sync methods.
+- `from.id` compared against the Page's `account_id` determines `is_from_page`.
+- `attachments.data[0]` (if present) supplies `attachment_type` (from `mime_type`) and
+  `attachment_source_url` (from `image_data.url` / `video_data.url` / `file_url`,
+  whichever is present).
+
+### 3.3 Send a message (Send API)
+
+```
+POST /{page-id}/messages
+  access_token=<page access token>
+  body (JSON): {
+    "recipient": { "id": "<participant PSID>" },
+    "messaging_type": "RESPONSE",
+    "message": { "text": "..." }
+                 // or, for an attachment:
+                 // { "attachment": { "type": "image", "payload": { "url": "<public url>" } } }
+  }
+```
+
+**Important implementation detail:** unlike `createComment` / `createTextPost` in
+`FacebookHelper`, which POST flat form-encoded params, the Send API requires a
+genuine **JSON body** with nested `recipient`/`message` objects. Use
+`Http::asJson()->withToken(...)->post(...)` for this one call — form-encoding the
+nested arrays the way the other `create*` methods do will not work here.
+
+`messaging_type: RESPONSE` is used as a fixed default since there's no webhook yet to
+track the 24-hour standard messaging window / message tags. If Facebook rejects a
+send because the window has closed, that surfaces as a normal `RuntimeException` from
+`FacebookHelper` (same failure handling as every other Graph call here) and the
+message stays retryable, matching `CommentReplyService`'s failure model.
+
+### 3.4 Repository interface additions
+
+`app/Repositories/FacebookRepositoryInterface.php` gains three methods (implemented
+in `app/Helpers/FacebookHelper.php`, the only class implementing this interface):
+
+```php
+/**
+ * Get every Messenger conversation for a Page, following pagination automatically.
+ *
+ * @return array<int, array{id: string, snippet?: string, unread_count?: int, updated_time?: string, message_count?: int, link?: string, participants?: array{data: array<int, array{id: string, name?: string, email?: string}>}}>
+ */
+public function getPageConversations(string $pageAccessToken, string $pageId): array;
+
+/**
+ * Get every message in a conversation, following pagination automatically.
+ *
+ * @return array<int, array{id: string, message?: string, from?: array{id: string, name?: string}, created_time?: string, attachments?: array{data: array<int, array{mime_type?: string, image_data?: array, video_data?: array, file_url?: string}>}}>
+ */
+public function getConversationMessages(string $pageAccessToken, string $conversationId): array;
+
+/**
+ * Send a Messenger message from a Page to a participant (Send API).
+ *
+ * @return array{recipient_id: string, message_id: string}
+ */
+public function sendMessage(string $pageAccessToken, string $pageId, string $recipientId, ?string $message = null, ?string $attachmentUrl = null): array;
+```
+
+---
+
+## 4. Backend — Service Layer
+
+New `app/Services/ConversationService.php` (business logic only, per project-guide §4):
+
+- `index(?FacebookApp $app, ?FacebookAppAccount $account, ?Conversation $conversation): array`
+  — resolves everything the page needs in one shot:
+  - `apps` = the user's `FacebookApp` records (for the top switcher).
+  - `selectedApp` = `$app` or the user's most-recently-connected app.
+  - `pages` = `$selectedApp->accounts` (the Page pills next to the app switcher).
+  - `selectedAccount` = `$account` (must belong to `$selectedApp`) or null.
+  - `conversations` = `$selectedAccount->conversations()->orderByDesc('conversation_updated_at')->get()` or `[]`.
+  - `selectedConversation` = `$conversation` (must belong to `$selectedAccount`) or null.
+  - `messages` = `$selectedConversation->messages()->orderBy('sent_at')->get()` or `[]`.
+  - Every cross-reference (`$account` belongs to `$app`, `$conversation` belongs to
+    `$account`) is `abort_unless`-checked the same way `PostCommentService` checks
+    `$comment->post->user_id === Auth::id()`.
+
+- `syncConversations(FacebookAppAccount $account): array{total,created,updated}`
+  — `abort_unless($account->user_id === Auth::id(), 403)`, calls
+  `getPageConversations`, upserts each by `where('facebook_app_account_id', ...)
+  ->where('conversation_id', ...)` (find-or-new, same shape as
+  `PostCommentService::syncSingleComment`), parsing `participants` to fill
+  `participant_id`/`participant_name`/`participant_email`.
+
+- `syncMessages(Conversation $conversation): array{total,created,updated}`
+  — ownership check via `$conversation->facebookAppAccount->user_id`, calls
+  `getConversationMessages`, upserts each by `message_id`, sets `is_from_page` by
+  comparing `from.id` to the account's `account_id`.
+
+- `sendMessage(Conversation $conversation, string $message, ?UploadedFile $attachment = null): ConversationMessage`
+  — ownership check; if `$attachment` present, upload it via
+  `MediaHelperRepositoryInterface::upload()` under
+  `UtilsHelper::MonthYearWisePath('conversations')` (same call shape
+  `PostService::attemptComment` already uses for `'comments'`), then resolve its
+  public URL. **Create the local `ConversationMessage` row first** (mirrors
+  `CommentReplyService::store`: create → attempt send → update `message_id` on
+  success, leave it null on failure) so a failed send is visible and retryable
+  instead of silently lost.
+
+- `retryMessage(ConversationMessage $message): ConversationMessage` — guards
+  `$message->message_id === null` (same "only failed X can be retried" guard as
+  `PostCommentService::retry` / the old `CommentReplyService::retry`), re-sends.
+
+All Graph failures are caught the same way `CommentReplyService::sendReply` does:
+catch `RuntimeException` from the repository, leave `message_id` null, return
+`false`/leave the row pending, so the UI can offer a retry — no throwing out of
+`sendMessage` on a delivery failure, only on validation/ownership problems.
+
+---
+
+## 5. Backend — Requests, Controller, Routes
+
+### 5.1 Request
+
+`app/Http/Requests/ConversationMessageStoreRequest.php`:
+
+```php
+'message' => ['nullable', 'string', 'max:2000', 'required_without:attachment'],
+'attachment' => ['nullable', 'file', 'image', 'max:10240', 'required_without:message'],
+```
+
+(2000 chars mirrors Messenger's practical text limit; at least one of message/attachment required, same idea as posts requiring either text or an image.)
+
+### 5.2 Controller
+
+`app/Http/Controllers/ConversationController.php` — thin, per project-guide §"Controller Rule":
+
+```php
+public function index(Request $request): Response   // GET  /conversations
+public function syncConversations(FacebookAppAccount $facebookAppAccount): RedirectResponse  // POST /conversations/sync/{facebookAppAccount}
+public function syncMessages(Conversation $conversation): RedirectResponse                    // POST /conversations/{conversation}/messages/sync
+public function storeMessage(ConversationMessageStoreRequest $request, Conversation $conversation): RedirectResponse  // POST /conversations/{conversation}/messages
+public function retryMessage(ConversationMessage $conversationMessage): RedirectResponse       // POST /conversations/messages/{conversationMessage}/retry
+```
+
+`index()` reads `facebook_app_id`, `facebook_app_account_id`, `conversation_id` query
+params (all optional, plain `$request->query(...)`, no FormRequest needed — same
+treatment `PostCommentController`/list filters get), resolves the models, and calls
+`Inertia::render('conversations/pages/index', ['data' => $data])`.
+
+All four POST actions use `return back()->with(...)` (not a hardcoded named route),
+exactly the fix just applied to `PostController::syncAccount` — this keeps the user
+on the same `facebook_app_id` / `facebook_app_account_id` / `conversation_id` query
+string they were on, since `back()` returns to the referring URL as-is.
+
+### 5.3 Routes (`routes/web.php`, inside the existing `auth` group)
+
+```php
+Route::get('/conversations', [ConversationController::class, 'index'])->name('conversations.index');
+Route::post('/conversations/sync/{facebookAppAccount}', [ConversationController::class, 'syncConversations'])->name('conversations.sync');
+Route::post('/conversations/{conversation}/messages/sync', [ConversationController::class, 'syncMessages'])->name('conversations.messages.sync');
+Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
+Route::post('/conversations/messages/{conversationMessage}/retry', [ConversationController::class, 'retryMessage'])->name('conversations.messages.retry');
+```
+
+---
+
+## 6. Frontend — Module Structure
+
+```text
+resources/js/modules/conversations/
+├── pages/
+│   └── index.tsx
+├── components/
+│   ├── ConversationAccountSwitcher.tsx
+│   ├── ConversationList.tsx
+│   ├── ConversationThread.tsx
+│   └── MessageBubble.tsx
+└── types/
+    └── conversation.ts
+```
+
+`conversation.ts` defines `ConversationApp` (`{id, app_name}`), `ConversationPage`
+(`{id, account_id, account_name, link}`), `ConversationItem`, `ConversationMessageItem`,
+and the page's `Props['data']` shape — matching how `posts/types/post.ts` and
+`posts/types/post-comment.ts` are split today.
+
+### 6.1 Layout
+
+`index.tsx` still renders inside the shared `AppLayout` (sidebar + navbar stay — same
+chrome every other page uses), but its own content is a dedicated split layout, not
+reused from anywhere else yet:
+
+```
+AppLayout
+└── main (flex-1, overflow-hidden, flex-col)
+    ├── ConversationAccountSwitcher   (full width, fixed height)
+    └── flex-1 flex overflow-hidden
+        ├── ConversationList   (fixed width e.g. 320px, own overflow-y-auto)
+        └── ConversationThread (flex-1, own overflow-y-auto, composer pinned to bottom)
+```
+
+No new shared layout component is introduced for this — if a second module later
+needs the same chat shell, extract `shared/layouts/ChatLayout.tsx` at that time
+(YAGNI now).
+
+### 6.2 `ConversationAccountSwitcher`
+
+Top box. A `<select>` of the user's connected `FacebookApp`s ("Facebook Account"),
+next to a horizontal row of pill buttons for that app's Pages ("Page Account"),
+mirroring the account-card visuals already used in `facebook-apps/pages/accounts.tsx`
+but compact. Selecting either does a partial Inertia GET reload:
+
+```tsx
+router.get(
+    route('conversations.index'),
+    { facebook_app_id: appId, facebook_app_account_id: undefined /* reset page+thread on app change */ },
+    { preserveState: true, preserveScroll: true, replace: true, only: ['data'] },
+);
+```
+
+Selecting a Page pill sets `facebook_app_account_id` (keeping `facebook_app_id`,
+resetting `conversation_id`), matching how `PostFilters` already does query-driven
+partial reloads (`resources/js/modules/posts/components/PostFilters.tsx`).
+
+### 6.3 `ConversationList`
+
+Left column. Header has the **"Sync Conversations"** button
+(`router.post(route('conversations.sync', { facebookAppAccount: selectedAccount.id }), {}, { preserveScroll: true, preserveState: true })`
+— same `syncing` boolean + spinning `RefreshCw` icon pattern as
+`list.tsx`'s `syncPost`/`syncComments`). Below it, each conversation row shows
+participant name, `snippet`, relative time from `conversation_updated_at`, and an
+unread-count badge when `unread_count > 0`. Clicking a row does a partial reload
+setting `conversation_id`, same `only: ['data']` pattern as above.
+
+Empty state ("No conversations yet" / "Sync Conversations to pull this Page's
+inbox.") follows the same empty-state pattern already used in `comments.tsx` and
+`list.tsx`.
+
+### 6.4 `ConversationThread`
+
+Right column. Header shows the selected conversation's participant (name + link out
+to Facebook, same `ExternalLink` treatment as post/comment permalinks) and the
+**"Sync Messages"** button (`conversations.messages.sync` for the open conversation).
+Below it, a scrollable message list — `MessageBubble` right-aligned + primary color
+when `is_from_page`, left-aligned + surface color otherwise (own component, not
+reused from `CommentReplyBox`, since chat bubbles read differently than nested reply
+threads). A composer at the bottom uses `useForm` (project-guide §11 pattern) with a
+text input, an attach-file button, and a send button; posts to
+`conversations.messages.store` and resets on success.
+
+When no conversation is selected: an empty state prompting "Select a conversation to
+start messaging."
+
+### 6.5 `MessageBubble`
+
+Renders one message: text, optional attachment image, timestamp. When
+`!message_id` (failed/pending outbound message) and `is_from_page`, shows a small
+"Failed — Retry" affordance calling `conversations.messages.retry`, the same visual
+language `CommentReplyBox` already uses for failed replies.
+
+---
+
+## 7. Sidebar Navigation
+
+Add one new top-level item in `Sidebar.tsx`'s `buildNavItems` "Main" group, next to
+`post`:
+
+```ts
+{ id: 'conversations', label: 'Conversation', icon: MessagesSquare, routeName: 'conversations.index' },
+```
+
+(`MessagesSquare` from `lucide-react`, already used elsewhere in this codebase for
+the comments-sync icon in `list.tsx`.)
+
+---
+
+## 8. Sync Buttons Recap
+
+Exactly two, matching the two sync granularities already established by
+Posts (`posts.sync` / `posts.sync-account`) and Comments (`posts.comments.sync`):
+
+1. **Sync Conversations** — top of the conversation list; pulls the selected Page's
+   thread list + metadata (`conversations.sync`).
+2. **Sync Messages** — top of the open thread; pulls that conversation's full message
+   history (`conversations.messages.sync`).
+
+---
+
+## 9. Explicitly Out of Scope — Webhooks (future work)
+
+Not implemented in this pass, per instruction. When added later, this would:
+
+- Register a webhook endpoint and subscribe the app to the Page's `messages` /
+  `messaging_postbacks` fields (`POST /{page-id}/subscribed_apps`).
+- Replace manual "Sync Messages" polling with real-time inserts as messages arrive,
+  and let `messaging_type` in `sendMessage` be chosen correctly (`RESPONSE` inside
+  the 24h window vs a message tag outside it) instead of the fixed `RESPONSE` default
+  used for now.
+- Push new messages/unread counts to the open `ConversationThread` client-side
+  (likely via Laravel Echo/broadcasting, a separate concern from the Graph API work
+  itself).
+
+Nothing in the schema above needs to change to support this later — a webhook
+handler would just call into the same `ConversationService::syncMessages`-shaped
+upsert logic for a single incoming message instead of a full re-pull.

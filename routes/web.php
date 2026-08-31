@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\CustomTemplateRequestController as AdminCustomTemplateRequestController;
 use App\Http\Controllers\Admin\TemplateController as AdminTemplateController;
 use App\Http\Controllers\CommentReplyController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\CustomTemplateRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacebookAppAccountController;
@@ -48,6 +49,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/posts/{post}/comments/reply-all', [CommentReplyController::class, 'replyToAll'])->name('posts.comments.reply-all');
     Route::post('/posts/comments/{postComment}/replies', [CommentReplyController::class, 'store'])->name('posts.comments.replies.store');
     Route::post('/posts/comments/replies/{reply}/retry', [CommentReplyController::class, 'retry'])->name('posts.comments.replies.retry');
+
+    Route::get('/conversations', [ConversationController::class, 'index'])->name('conversations.index');
+    Route::post('/conversations/sync/{facebookAppAccount}', [ConversationController::class, 'syncConversations'])->name('conversations.sync');
+    Route::post('/conversations/{conversation}/messages/sync', [ConversationController::class, 'syncMessages'])->name('conversations.messages.sync');
+    Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
+    Route::post('/conversations/messages/{conversationMessage}/retry', [ConversationController::class, 'retryMessage'])->name('conversations.messages.retry');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/{template}/edit', [TemplateController::class, 'edit'])->name('templates.edit');
