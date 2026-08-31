@@ -51,8 +51,12 @@ class Post extends Model
         return $this->hasMany(PostContent::class);
     }
 
+    /**
+     * Top-level comments only — replies are PostComment rows with parent_comment_id set,
+     * nested under each comment's own `replies` relation instead of listed flat here.
+     */
     public function comments(): HasMany
     {
-        return $this->hasMany(PostComment::class);
+        return $this->hasMany(PostComment::class)->whereNull('parent_comment_id');
     }
 }

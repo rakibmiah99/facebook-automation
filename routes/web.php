@@ -47,7 +47,7 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/posts/{post}/comments/reply-all', [CommentReplyController::class, 'replyToAll'])->name('posts.comments.reply-all');
     Route::post('/posts/comments/{postComment}/replies', [CommentReplyController::class, 'store'])->name('posts.comments.replies.store');
-    Route::post('/posts/comments/replies/{commentReply}/retry', [CommentReplyController::class, 'retry'])->name('posts.comments.replies.retry');
+    Route::post('/posts/comments/replies/{reply}/retry', [CommentReplyController::class, 'retry'])->name('posts.comments.replies.retry');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/{template}/edit', [TemplateController::class, 'edit'])->name('templates.edit');

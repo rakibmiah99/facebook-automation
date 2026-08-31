@@ -19,9 +19,11 @@ class FacebookHelper implements FacebookRepositoryInterface
     private const POST_FIELDS = 'id,message,created_time,permalink_url,attachments';
 
     /**
-     * Fields requested when reading comments back from the Graph API.
+     * Fields requested when reading comments back from the Graph API. `parent` identifies
+     * whether a comment is a top-level comment (parent is the post itself) or a reply
+     * (parent is another comment), so replies can be linked to their parent comment.
      */
-    private const COMMENT_FIELDS = 'id,message,from{id,name},created_time,attachment';
+    private const COMMENT_FIELDS = 'id,message,from{id,name},created_time,attachment,parent{id}';
 
     public function __construct()
     {

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\CommentReply;
 use App\Models\FacebookAppAccount;
 use App\Models\Post;
 use App\Models\PostComment;
@@ -18,9 +17,11 @@ class CommentReplyService
     }
 
     /**
-     * Send a single reply to one comment.
+     * Send a single reply to one comment. A reply is stored as a PostComment row pointing
+     * back at its parent via parent_comment_id, so it's the same table a synced reply from
+     * Facebook would land in and the two never end up duplicated.
      */
-    public function store(PostComment $comment, string $message): CommentReply
+    public function store(PostComment $comment, string $message): PostComment
     {
         $comment->loadMissing('post.facebookAppAccount');
         $post = $comment->post;
@@ -30,9 +31,12 @@ class CommentReplyService
         $account = $this->requireAccount($post);
         $this->requireSyncedComment($comment);
 
-        $reply = CommentReply::create([
-            'post_comment_id' => $comment->id,
+        $reply = PostComment::create([
+            'post_id' => $post->id,
+            'parent_comment_id' => $comment->id,
             'message' => $message,
+            'commenter_id' => $account->account_id,
+            'commenter_name' => $account->account_name,
             'is_automatic' => false,
         ]);
 
@@ -44,22 +48,25 @@ class CommentReplyService
     /**
      * Retry a reply that previously failed to reach Facebook.
      */
-    public function retry(CommentReply $reply): CommentReply
+    public function retry(PostComment $reply): PostComment
     {
-        $reply->loadMissing('comment.post.facebookAppAccount');
-        $comment = $reply->comment;
-        $post = $comment?->post;
+        $reply->loadMissing('post.facebookAppAccount', 'parent');
+        $post = $reply->post;
 
         abort_unless($post && $post->user_id === Auth::id(), 403);
 
-        if ($reply->reply_id) {
+        if (! $reply->parent_comment_id) {
+            throw new RuntimeException('Only replies can be retried here.');
+        }
+
+        if ($reply->comment_id) {
             throw new RuntimeException('Only failed replies can be retried.');
         }
 
         $account = $this->requireAccount($post);
-        $this->requireSyncedComment($comment);
+        $this->requireSyncedComment($reply->parent);
 
-        $this->sendReply($comment, $reply, $account);
+        $this->sendReply($reply->parent, $reply, $account);
 
         return $reply->refresh();
     }
@@ -84,15 +91,18 @@ class CommentReplyService
             ->where(function ($query) use ($account) {
                 $query->whereNull('commenter_id')->orWhere('commenter_id', '!=', $account->account_id);
             })
-            ->whereDoesntHave('replies', fn ($query) => $query->whereNotNull('reply_id'))
+            ->whereDoesntHave('replies', fn ($query) => $query->whereNotNull('comment_id'))
             ->get();
 
         $summary = ['total' => $comments->count(), 'sent' => 0, 'failed' => 0];
 
         foreach ($comments as $comment) {
-            $reply = CommentReply::create([
-                'post_comment_id' => $comment->id,
+            $reply = PostComment::create([
+                'post_id' => $post->id,
+                'parent_comment_id' => $comment->id,
                 'message' => $message,
+                'commenter_id' => $account->account_id,
+                'commenter_name' => $account->account_name,
                 'is_automatic' => true,
             ]);
 
@@ -117,19 +127,19 @@ class CommentReplyService
         return $account;
     }
 
-    private function requireSyncedComment(PostComment $comment): void
+    private function requireSyncedComment(?PostComment $comment): void
     {
-        if (! $comment->comment_id) {
+        if (! $comment || ! $comment->comment_id) {
             throw new RuntimeException('This comment has not been synced from Facebook and cannot be replied to.');
         }
     }
 
     /**
-     * Post a reply to Facebook and record the outcome. Returns false (leaving reply_id
+     * Post a reply to Facebook and record the outcome. Returns false (leaving comment_id
      * null) on failure instead of throwing, so bulk replies can keep going and failed
      * ones stay retryable, matching how failed post comments already behave.
      */
-    private function sendReply(PostComment $comment, CommentReply $reply, FacebookAppAccount $account): bool
+    private function sendReply(PostComment $comment, PostComment $reply, FacebookAppAccount $account): bool
     {
         try {
             $response = $this->facebookRepository->createComment(
@@ -138,7 +148,7 @@ class CommentReplyService
                 $reply->message,
             );
 
-            $reply->update(['reply_id' => $response['id'] ?? null]);
+            $reply->update(['comment_id' => $response['id'] ?? null]);
 
             return true;
         } catch (RuntimeException) {

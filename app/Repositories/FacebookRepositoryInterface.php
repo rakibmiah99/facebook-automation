@@ -58,7 +58,7 @@ interface FacebookRepositoryInterface
     /**
      * Get every comment (including replies) left on a Facebook post, following pagination automatically.
      *
-     * @return array<int, array{id: string, message?: string, from?: array{id: string, name: string}, created_time?: string, attachment?: array}>
+     * @return array<int, array{id: string, message?: string, from?: array{id: string, name: string}, created_time?: string, attachment?: array, parent?: array{id: string}}>
      */
     public function getPostComments(string $pageAccessToken, string $postId): array;
 }

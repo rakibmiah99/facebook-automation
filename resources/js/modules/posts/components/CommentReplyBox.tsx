@@ -41,7 +41,7 @@ export default function CommentReplyBox({ comment }: CommentReplyBoxProps) {
 
     const retryReply = (replyId: number) => {
         router.post(
-            route('posts.comments.replies.retry', { commentReply: replyId }),
+            route('posts.comments.replies.retry', { reply: replyId }),
             {},
             { preserveScroll: true, onStart: () => setRetryingId(replyId), onFinish: () => setRetryingId(null) },
         );
@@ -52,7 +52,7 @@ export default function CommentReplyBox({ comment }: CommentReplyBoxProps) {
             {comment.replies.length > 0 && (
                 <div className="space-y-2 mb-2">
                     {comment.replies.map((reply) => {
-                        const published = Boolean(reply.reply_id);
+                        const published = Boolean(reply.comment_id);
 
                         return (
                             <div key={reply.id} className="flex items-start gap-2 pl-4" style={{ borderLeft: '2px solid var(--color-border)' }}>

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CommentReplyAllRequest;
 use App\Http\Requests\CommentReplyStoreRequest;
-use App\Models\CommentReply;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Services\CommentReplyService;
@@ -33,20 +32,18 @@ class CommentReplyController extends Controller
             ->with('success', 'Reply sent successfully.');
     }
 
-    public function retry(CommentReply $commentReply): RedirectResponse
+    public function retry(PostComment $reply): RedirectResponse
     {
-        $commentReply->loadMissing('comment');
-
         try {
-            $this->commentReplyService->retry($commentReply);
+            $this->commentReplyService->retry($reply);
         } catch (RuntimeException $exception) {
             return redirect()
-                ->route('posts.comments.index', $commentReply->comment->post_id)
+                ->route('posts.comments.index', $reply->post_id)
                 ->with('error', $exception->getMessage());
         }
 
         return redirect()
-            ->route('posts.comments.index', $commentReply->comment->post_id)
+            ->route('posts.comments.index', $reply->post_id)
             ->with('success', 'Reply sent successfully.');
     }
 

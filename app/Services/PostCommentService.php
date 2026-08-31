@@ -22,8 +22,20 @@ class PostCommentService
 
         $comments = $post->comments()
             ->with('replies')
-            ->when($filters['commenter'] ?? null, fn ($query, $commenter) => $query->where('commenter_name', 'like', "%{$commenter}%"))
-            ->when($filters['message'] ?? null, fn ($query, $message) => $query->where('message', 'like', "%{$message}%"))
+            ->when(
+                $filters['commenter'] ?? null,
+                fn ($query, $commenter) => $query->where(function ($query) use ($commenter) {
+                    $query->where('commenter_name', 'like', "%{$commenter}%")
+                        ->orWhereHas('replies', fn ($query) => $query->where('commenter_name', 'like', "%{$commenter}%"));
+                }),
+            )
+            ->when(
+                $filters['message'] ?? null,
+                fn ($query, $message) => $query->where(function ($query) use ($message) {
+                    $query->where('message', 'like', "%{$message}%")
+                        ->orWhereHas('replies', fn ($query) => $query->where('message', 'like', "%{$message}%"));
+                }),
+            )
             ->orderByDesc('commented_at')
             ->orderByDesc('created_at')
             ->get();
@@ -40,6 +52,8 @@ class PostCommentService
 
     /**
      * Pull every comment (and reply) left on a post's Facebook post into the local database.
+     * Comments and replies share the same table, linked via parent_comment_id, so this keeps
+     * each Facebook comment as exactly one row no matter how many times it's synced.
      *
      * @return array{total: int, created: int, updated: int}
      */
@@ -61,9 +75,10 @@ class PostCommentService
         $facebookComments = $this->facebookRepository->getPostComments($account->access_token, $post->post_id);
 
         $summary = ['total' => 0, 'created' => 0, 'updated' => 0];
+        $localIdByFacebookId = [];
 
         foreach ($facebookComments as $facebookComment) {
-            $result = $this->syncSingleComment($post, $facebookComment);
+            $result = $this->syncSingleComment($post, $facebookComment, $localIdByFacebookId);
 
             if (! $result) {
                 continue;
@@ -76,7 +91,7 @@ class PostCommentService
         return $summary;
     }
 
-    private function syncSingleComment(Post $post, array $facebookComment): ?string
+    private function syncSingleComment(Post $post, array $facebookComment, array &$localIdByFacebookId): ?string
     {
         $facebookCommentId = $facebookComment['id'] ?? null;
 
@@ -99,6 +114,7 @@ class PostCommentService
         }
 
         $comment->fill([
+            'parent_comment_id' => $this->resolveParentId($post, $facebookComment, $localIdByFacebookId),
             'message' => $facebookComment['message'] ?? null,
             'commenter_id' => $facebookComment['from']['id'] ?? null,
             'commenter_name' => $facebookComment['from']['name'] ?? null,
@@ -108,7 +124,33 @@ class PostCommentService
 
         $comment->save();
 
+        $localIdByFacebookId[$facebookCommentId] = $comment->id;
+
         return $isNew ? 'created' : 'updated';
+    }
+
+    /**
+     * Facebook's `parent` field points at the post itself for a top-level comment, or at
+     * another comment for a reply. Resolve that into the local parent comment's id, checking
+     * comments already seen earlier in this sync before falling back to the database (for
+     * parents synced in a previous run).
+     */
+    private function resolveParentId(Post $post, array $facebookComment, array $localIdByFacebookId): ?int
+    {
+        $parentFacebookId = $facebookComment['parent']['id'] ?? null;
+
+        if (! $parentFacebookId || $parentFacebookId === $post->post_id) {
+            return null;
+        }
+
+        if (isset($localIdByFacebookId[$parentFacebookId])) {
+            return $localIdByFacebookId[$parentFacebookId];
+        }
+
+        return PostComment::query()
+            ->where('post_id', $post->id)
+            ->where('comment_id', $parentFacebookId)
+            ->value('id');
     }
 
     private function parseFacebookDate(?string $createdTime): ?string
@@ -130,6 +172,10 @@ class PostCommentService
         $post = $comment->post;
 
         abort_unless($post && $post->user_id === Auth::id(), 403);
+
+        if ($comment->parent_comment_id) {
+            throw new RuntimeException('This is a reply, not a top-level comment, and cannot be retried here.');
+        }
 
         if ($comment->comment_id) {
             throw new RuntimeException('Only failed comments can be retried.');

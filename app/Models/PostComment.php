@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['post_id', 'comment_id', 'commenter_id', 'commenter_name', 'message', 'attachment_path', 'image_source_url', 'commented_at'])]
+#[Fillable(['post_id', 'parent_comment_id', 'comment_id', 'commenter_id', 'commenter_name', 'message', 'attachment_path', 'image_source_url', 'commented_at', 'is_automatic'])]
 #[Appends(['attachment_url'])]
 class PostComment extends Model
 {
@@ -18,6 +18,7 @@ class PostComment extends Model
     {
         return [
             'commented_at' => 'datetime',
+            'is_automatic' => 'boolean',
         ];
     }
 
@@ -26,9 +27,21 @@ class PostComment extends Model
         return $this->belongsTo(Post::class);
     }
 
+    /**
+     * The comment this reply was made on. Null for top-level comments.
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_comment_id');
+    }
+
+    /**
+     * Replies made on this comment. A reply is just another PostComment row that
+     * points back at its parent via parent_comment_id.
+     */
     public function replies(): HasMany
     {
-        return $this->hasMany(CommentReply::class);
+        return $this->hasMany(self::class, 'parent_comment_id')->orderBy('commented_at')->orderBy('created_at');
     }
 
     protected function attachmentUrl(): Attribute
