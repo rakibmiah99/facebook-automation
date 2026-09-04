@@ -1,5 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { route } from 'ziggy-js';
+import JsonEditor from '../../../../shared/components/JsonEditor';
 import AppLayout from '../../../../shared/layouts/AppLayout';
 import type { TemplateConfig, TemplateItem } from '../../../templates/types/template';
 import { ASPECT_RATIO_OPTIONS } from '../../../template-requests/types/template-request';
@@ -139,13 +140,7 @@ export default function AdminTemplateEdit({ data }: Props) {
                                 </label>
                                 <TemplateJsonGuidelineModal />
                             </div>
-                            <textarea
-                                rows={32}
-                                value={form.data.config}
-                                onChange={(e) => form.setData('config', e.target.value)}
-                                className="w-full px-3.5 py-2.5 rounded-lg text-xs font-mono outline-none"
-                                style={{ background: 'var(--color-surface-2)', border: `1px solid ${form.errors.config ? 'var(--color-danger)' : 'var(--color-border)'}`, color: 'var(--color-text)' }}
-                            />
+                            <JsonEditor value={form.data.config} onChange={(v) => form.setData('config', v)} error={form.errors.config} />
                             {form.errors.config && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{form.errors.config}</p>}
                         </div>
 

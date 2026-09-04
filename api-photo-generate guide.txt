@@ -1,0 +1,461 @@
+Implement a server-side Template Image generation system for the Templates module:
+Spatie Browsershot + Puppeteer + Chromium.
+
+IMPORTANT:
+- First inspect the existing project architecture, especially the current client-side template
+  generation implementation. It is fully working and must NOT be redesigned or removed.
+- Do NOT modify TemplateController, TemplateService, TemplateGenerateRequest, edit.tsx, or
+  TemplatePreview.tsx. They stay exactly as they are — the existing "Generate Image" button keeps
+  screenshotting the DOM client-side with modern-screenshot and posting to
+  POST /templates/{template}/generate, unchanged.
+- The primary goal is to add a SEPARATE, API-driven generation path that produces the SAME visual
+  result as the client-side preview, rendered entirely on the server from the template's `config`
+  JSON — with maximum pixel fidelity to TemplatePreview.tsx.
+- Every new class (controller, service, form request, Blade view) must be new/dedicated. Do not
+  extend or branch inside the existing TemplateController/TemplateService.
+- Avoid introducing unnecessary dependencies.
+- Do not modify unrelated parts of the project.
+
+CURRENT CLIENT-SIDE IMPLEMENTATION (source of truth — inspect before writing anything):
+- resources/js/modules/templates/pages/edit.tsx
+  - Renders <TemplatePreview ref={previewRef} .../> and, on "Generate Image", calls
+    modern-screenshot's domToBlob(previewRef.current, { scale: template.width / previewRef.current.clientWidth, type: 'image/jpeg', quality: 0.92, backgroundColor: '#ffffff', fetchFn: ... }).
+  - The `scale` option upsizes the (shrunk, responsive) on-screen preview back to the template's
+    real pixel dimensions (template.width × template.height) at capture time — i.e. the final
+    output resolution is exactly template.width × template.height, not a multiple of it.
+  - Cross-origin images are re-fetched through /media/proxy (MediaProxyController) as data URLs to
+    avoid a tainted canvas. This is a client-side-only concern; Browsershot has no canvas/CORS
+    restriction and can be pointed at real URLs or local files directly (see §7).
+  - The resulting blob is uploaded as `generated_image` (multipart) to
+    POST /templates/{template}/generate.
+- resources/js/modules/templates/components/TemplatePreview.tsx
+  - Renders `config.background` (color, or `<img>` for type "image") and then absolutely
+    positions every `config.fields[]` entry inside a container sized via CSS `aspect-ratio` and
+    scaled down with a ResizeObserver (`scale = renderedWidth / template.width`).
+  - Field styles are plain CSS property names (TemplateFieldStyle) spread straight onto the
+    element's `style` — top/left/right/bottom/width/height/color/fontSize/textAlign/display/
+    alignItems/justifyContent/lineHeight/backgroundColor/backgroundImage/borderColor/borderWidth/
+    borderRadius/padding/objectFit.
+  - `SCALED_KEYS` (top/left/right/bottom/width/height/fontSize/borderWidth/borderRadius/padding)
+    are pixel-space values scaled down by `scale`; a value ending in "%" is left untouched (already
+    relative to the correctly-sized container).
+  - Image fields render an absolutely positioned box with `overflow: hidden` and an `<img>` sized
+    `w-full h-full` with `objectFit` from the field style (default "cover").
+  - Text fields render `whiteSpace: pre-wrap`, `fontFamily: TEMPLATE_FONT_FAMILY`,
+    `lineHeight: DEFAULT_LINE_HEIGHT` (1.25) unless overridden — there is NO line-clamp / max-line
+    truncation in the current implementation. Do not invent one server-side.
+  - `field.hidden` fields still render (they're part of the final image) — only the customize
+    form's input and the admin dashed outline/"Hidden" badge are suppressed. The server render
+    must draw hidden fields too.
+- resources/js/modules/templates/utils/templateStyle.ts
+  - `DEFAULT_LINE_HEIGHT = 1.25`
+  - `TEMPLATE_FONT_FAMILY = "'Template Render Font', Inter, sans-serif"`
+  - Comments here already anticipate a server-side counterpart named `TemplateRenderService` with
+    `resolveLength`/`resolveBox`/`mapFlexAlign` — follow that naming (see §4).
+- resources/js/modules/templates/types/template.ts — TemplateConfig/TemplateField/
+  TemplateFieldStyle/TemplateBackground are the authoritative shape of `Template::config`. A
+  length (`top`, `left`, `width`, `fontSize`, etc.) is a plain number (template-pixel-space), a
+  "*px" string, or a "*%" string resolved against the canvas.
+- resources/css/app.css — declares the font actually used:
+    @font-face {
+        font-family: 'Template Render Font';
+        src: url('../fonts/Inter-Variable.ttf') format('truetype');
+        font-weight: 100 900;
+        font-style: normal;
+    }
+  This is a variable font (Inter), NOT a Bengali font — unlike the news module, no Bangla-specific
+  font/date formatting is involved here.
+- app/Models/Template.php
+  - `config` is cast to `array`.
+  - `resolveConfigUrls(): array` resolves the stored relative storage paths in `config` (background
+    image path, field default image paths, `style.backgroundImage: url('...')`) into public URLs
+    via `UtilsHelper::GetMediaUrl()`. Reuse this method server-side — do not duplicate its logic.
+- app/Services/TemplateService.php
+  - `edit()` calls `$template->resolveConfigUrls()` and hands the resolved config to Inertia.
+  - `generate()` (existing, client-triggered) just stores the already-rendered upload via
+    `MediaHelperRepositoryInterface::upload()` under `UtilsHelper::MonthYearWisePath('templates')`
+    and creates a `TemplateGeneration` row. This method is NOT touched by this feature.
+- app/Http/Controllers/TemplateController.php — thin, delegates to TemplateService. Pattern to
+  copy for the new controller (constructor-injected service, minimal logic in the action).
+- app/Http/Requests/TemplateGenerateRequest.php — existing request validates the uploaded
+  screenshot (`generated_image`) + `values`. The new request is different: it accepts template ID
+  (route-bound) + optional `values` override only — there is no file upload, the server renders
+  the image itself.
+- app/Repositories/MediaHelperRepositoryInterface.php
+  - `upload(UploadedFile $file, string $path, ?string $disk = null, bool $watermark = false): string`
+  - `url(string $path, ?string $disk = null): string`
+  `upload()` requires an `UploadedFile` instance — Browsershot returns raw PNG bytes, so wrap them
+  (see §14). Do not add a new method to this interface unless genuinely necessary.
+- app/Helpers/UtilsHelper.php
+  - `MonthYearWisePath(string $prefix = 'uploads'): string` → `"{prefix}/{Y}/{m}"`.
+  - `GetMediaUrl(?string $path, ?string $disk = null): ?string` → passes through already-absolute
+    http(s) URLs untouched, otherwise resolves via the media helper's `url()`.
+- database/migrations/..._create_template_generations_table.php — `template_generations` already
+  has `template_id`, `user_id`, `path`, `values` (json, nullable), timestamps. This is exactly the
+  shape the API response needs — reuse this table (see §15), do not create a new one.
+- routes/web.php — this project has NO routes/api.php and NO Sanctum. JSON endpoints are plain
+  routes inside the existing `Route::middleware('auth')->group(...)` in web.php, using the same
+  session-cookie auth as every other route. bootstrap/app.php already renders JSON automatically
+  for any path matching `api/*` (`shouldRenderJsonWhen(fn ($r) => $r->is('api/*') || $r->expectsJson())`).
+  Follow this exact convention — do not introduce Sanctum/tokens/a separate api.php for this.
+
+IMPLEMENTATION UPDATE (post-implementation — supersedes §2/§19 below):
+`php artisan install:api` was run after this guide was written, adding a real `routes/api.php`
++ `laravel/sanctum` + `bootstrap/app.php`'s `api:` registration. The feature now lives there
+instead of inside web.php's session-auth group, as a proper token-authenticated API:
+
+    Route::middleware('auth:sanctum')->prefix('templates')->name('api.templates.')->group(function () {
+        Route::get('/', [TemplateImageController::class, 'index'])->name('index');
+        Route::get('/{template}', [TemplateImageController::class, 'show'])->name('show');
+        Route::post('/{template}/generate-image', [TemplateImageController::class, 'generate'])->name('generate-image');
+    });
+
+- `User` model now has `Laravel\Sanctum\HasApiTokens` (was missing after install:api — required for
+  `$user->createToken()`/token auth to actually resolve a user).
+- `GET /api/templates` — templates visible to the token's user (common + own), via
+  `TemplateImageGenerationService::listAvailable()` (reuses `Template::scopeVisibleTo()`).
+- `GET /api/templates/{template}` — one template's fields + a ready-to-use `values` example
+  (text fields only), via `TemplateImageGenerationService::describe()` — lets an API consumer
+  discover exactly what `values` payload shape `generate-image` expects for that template before
+  calling it.
+- Auth is now `Authorization: Bearer <token>` (Sanctum personal access token), not the session
+  cookie. Tests use `Laravel\Sanctum\Sanctum::actingAs($user)`, not `$this->actingAs($user)`.
+
+REQUIREMENTS (original plan — routing/auth specifics superseded by the update above):
+
+1. DEPENDENCIES
+- `composer require spatie/browsershot`.
+- Browsershot shells out to a small Node/Puppeteer script, so also add a Node dependency:
+  `npm install puppeteer-core` (use `puppeteer-core`, not full `puppeteer`, since Chrome is
+  supplied separately via env config per §13 — do not let Puppeteer download its own bundled
+  Chromium).
+- Node itself (v22, already present on this machine) must be present on the VPS; Browsershot can
+  be told the node binary path via `->setNodeBinary()` if it's not on PATH in the deploy
+  environment (e.g. behind a process manager) — expose that through env too if needed.
+- No other new dependency should be needed (no image-manipulation library — Chromium/CSS does all
+  the layout work, matching how the client already does it).
+
+2. API ENDPOINT
+Add, inside the existing `Route::middleware('auth')->group()` in routes/web.php (same group the
+current `templates.generate` route lives in — do not create routes/api.php):
+
+    Route::post('/api/templates/{template}/generate-image', [TemplateImageController::class, 'generate'])
+        ->name('api.templates.generate-image');
+
+- Auth: identical session-cookie auth as the rest of the app (no new auth mechanism).
+- Because the path starts with `api/`, bootstrap/app.php already forces JSON error rendering for
+  it — no extra exception-handling wiring required.
+- Route-model-bind `{template}` the same way the existing `templates.edit`/`templates.generate`
+  routes do.
+
+Request body (JSON or form): optional `values` (object, `values.*` string, same shape/limits as
+TemplateGenerateRequest's `values.*`) to override field defaults, exactly like the customize form
+does client-side. No file upload — the server renders the image itself.
+
+Response (mirror the reference JSON shape used for the News photo-card guide):
+
+    {
+        "status": true,
+        "message": "Template image generated successfully.",
+        "data": {
+            "url": "https://.../storage/templates/2026/09/xxxxx.png",
+            "path": "templates/2026/09/xxxxx.png",
+            "template_id": 12,
+            "generation_id": 87
+        }
+    }
+
+3. VALIDATION
+Create `App\Http\Requests\TemplateImageGenerateRequest` (new — do not reuse
+TemplateGenerateRequest, which is shaped around the uploaded-screenshot flow):
+
+    'values' => ['nullable', 'array'],
+    'values.*' => ['nullable', 'string', 'max:2000'],
+
+`template` itself is validated by Laravel's implicit route-model binding (404 if missing); add an
+explicit `authorize()` check equivalent to `TemplateService::authorizeAccess()`
+(`$template->is_common || $template->owner_id === auth()->id()`) — either inline in the new
+service (matching the existing pattern) or via a policy, but do not duplicate the private method,
+delegate to the same check the existing service already encodes.
+
+4. SERVICE ARCHITECTURE
+Do not put rendering/Browsershot logic in the controller. Split into two dedicated services,
+following the naming the codebase's own comments already anticipate
+(TemplateField/TemplateFieldStyle in types/template.ts and templateStyle.ts explicitly reference a
+future `TemplateRenderService` with `resolveLength`/`resolveBox`/`mapFlexAlign`):
+
+a) App\Services\TemplateRenderService (pure PHP, no I/O)
+   - Input: a `Template` (with `resolveConfigUrls()` already applied) + a `values` override array.
+   - Responsibilities:
+     - `resolveLength(mixed $value, ...): string` — the server-side counterpart of
+       TemplatePreview's `scaledLength`, except the server renders at 1:1 (no downscale — see
+       §11), so a plain number or "*px" string becomes `"{value}px"` and a "*%" string passes
+       through unchanged.
+     - `resolveBox(TemplateFieldStyle $style): array` — turns top/left/right/bottom/width/height
+       into a final absolute-position CSS box (mirrors `scaledStyle` in TemplatePreview.tsx).
+     - `mapFlexAlign(...)` — when `style.display === 'flex'`, map `alignItems`/`justifyContent`
+       straight through (same keys, CSS already understands them) — matches TemplatePreview's
+       `display: 'flex'` branch.
+     - Build a single render view-model: resolved background (color or resolved image URL/local
+       path), and each field with its resolved CSS box, resolved text (value override → field
+       default → ''), and resolved image src.
+     - Field ordering/hidden fields: keep every field (including `hidden: true` ones) in output —
+       exactly like TemplatePreview, hidden only affects the customize form, not the render.
+   - This service owns the config→render-model mapping so the Blade view stays a thin, declarative
+     template — the same separation of concerns TemplatePreview.tsx already has from
+     templates/pages/edit.tsx.
+
+b) App\Services\TemplateImageGenerationService (I/O: rendering, Browsershot, storage)
+   - Responsibilities:
+     - Authorize access to the template (reuse the same rule as TemplateService::authorizeAccess).
+     - Call TemplateRenderService to build the view-model.
+     - Render the Blade view (§5) to an HTML string via `view(...)->render()`.
+     - Run Browsershot against that HTML (§11/§12).
+     - Store the resulting PNG via the existing MediaHelperRepositoryInterface (§14).
+     - Create the `TemplateGeneration` row (§15).
+     - Return `{ url, path, template_id, generation_id }`.
+   - Keep the controller to: validate request → call this service → wrap in the JSON envelope.
+
+5. HTML TEMPLATE (BLADE)
+Create `resources/views/templates/render.blade.php` (new — separate from TemplatePreview.tsx,
+which stays untouched). This is the server-side equivalent of TemplatePreview's JSX output:
+
+- Root element sized exactly `{{ template.width }}px` × `{{ template.height }}px` (no
+  `aspect-ratio` + ResizeObserver scaling trick needed — the server always renders at the template's
+  real pixel size, so field boxes use `resolveLength()`'s plain px/% output directly, unmodified).
+- Background: `background: {{ background.type === 'color' ? background.value : '#fff' }}` on the
+  root, or an `<img>`/`background-image` covering the full box when `background.type === 'image'`
+  (match TemplatePreview's `object-cover`, `absolute inset-0 w-full h-full`).
+- Loop `config.fields` in the same order as TemplatePreview: absolutely positioned `<div>` per
+  field, using the box from TemplateRenderService.
+  - `type: 'image'` → `overflow: hidden` wrapper + `<img>` with `object-fit` from
+    `style.objectFit ?? 'cover'`, background fallback `style.backgroundColor ?? rgba(0,0,0,0.05)`
+    when no image is present, matching TemplatePreview exactly.
+  - `type: 'text'` → `white-space: pre-wrap`, `font-family: 'Template Render Font', Inter, sans-serif`,
+    `line-height: {{ lineHeight ?? 1.25 }}`, text content = override value → `field.default` → ''.
+  - Do NOT draw the "Hidden" badge / dashed outline — those are `revealHidden`-only, admin-preview
+    concerns from TemplatePreview.tsx, never part of the actual generated image (TemplatePreview
+    never draws them into the client's screenshot either, since `revealHidden` defaults to false in
+    edit.tsx's usage).
+  - Per the existing `borderRadius` comment in TemplateFieldStyle ("Preview-only — the server
+    renderer draws square corners"), the server render should intentionally omit `border-radius` —
+    this is a documented, deliberate difference, not a fidelity bug.
+- `@font-face` block embedding the same font declared in resources/css/app.css:
+      @font-face {
+          font-family: 'Template Render Font';
+          src: url('{{ $fontUrl }}') format('truetype');
+          font-weight: 100 900;
+          font-style: normal;
+      }
+  where `$fontUrl` is a Browsershot-reachable reference to `resources/fonts/Inter-Variable.ttf`
+  (see §6/§7 for how to expose it).
+- No Tailwind/Vite asset pipeline dependency inside this Blade file — write plain inline `<style>`
+  so the rendered HTML is fully self-contained and doesn't depend on the app's built CSS bundle
+  (Browsershot loads a standalone HTML string, not a Vite-served page).
+
+6. ASSETS
+- The font file `resources/fonts/Inter-Variable.ttf` is outside `public/`, so Chromium (spawned by
+  Browsershot as a separate OS process) cannot load it via a bare filesystem path reference from
+  HTML. Two viable options — pick whichever matches how this project already exposes non-public
+  resources (inspect for a precedent before deciding):
+  - Read the font file's contents server-side and inline it as a `data:` URI in the `@font-face`
+    `src` (simplest, zero new routes, no network hop, works identically for a `file://`-loaded or
+    `setHtml()`-loaded Browsershot page).
+  - Or copy/symlink the font into `public/fonts/` at build time and reference it by public URL.
+  Prefer the data-URI inline approach — it needs no new route, no public exposure decision, and
+  guarantees Chromium has the exact bytes without a filesystem/URL resolution edge case.
+- No other frontend-only asset (noise texture, logo, etc.) exists in this module — template
+  backgrounds/images are entirely data-driven from `config` (storage-backed), not bundled
+  Vite assets. Confirm this holds before assuming otherwise.
+
+7. IMAGE HANDLING
+- `Template::resolveConfigUrls()` already turns every image reference in `config` (background
+  path, field `default` image, `style.backgroundImage`) into a public URL via
+  `UtilsHelper::GetMediaUrl()`. Reuse this method as-is for the render view-model — do not
+  duplicate its path-resolution/CSS-url-extraction logic.
+- Unlike the client (which must proxy cross-origin images through `/media/proxy` to avoid a
+  tainted `<canvas>`), Browsershot has no canvas/CORS restriction — it can load the resolved public
+  URLs directly (whatever disk they resolve to: local `/storage/...`, S3, etc.). Do not route
+  server-side image loads through MediaProxyController; that concern is client-only and doesn't
+  apply here.
+- If the resolved disk is `local`/`public` and the app is reachable via `APP_URL` from the same
+  machine Chromium runs on, plain public URLs are sufficient — no special-casing needed.
+
+8. FONT
+- Reuse the exact same font as the client: `resources/fonts/Inter-Variable.ttf`, declared under
+  `font-family: 'Template Render Font'` — do not substitute a system font or a different weight
+  range (the file is a variable font spanning weight 100–900).
+- See §6 for how Chromium accesses the file (inline data URI recommended).
+- Ensure the screenshot only happens after the font has actually painted (§12) — a variable TTF is
+  cheap to parse but still asynchronous in Chromium.
+
+9. TEXT LAYOUT
+- Let Chromium/CSS perform all text wrapping — do not hand-roll wrapping/measurement in PHP.
+- Reproduce exactly, and only, what TemplatePreview.tsx does: `white-space: pre-wrap`, the
+  resolved `lineHeight` (default 1.25), resolved `fontSize`, resolved `textAlign`. There is no
+  line-clamp / max-lines / ellipsis behavior in the current template system (that's a News-module
+  concept) — do not add one.
+
+10. VALUES OVERRIDE
+- Accept the same `values` shape the client customize form produces: a flat `{ [fieldKey]: string }`
+  map, only for `type: 'text'` fields (image overrides aren't supported by this API — the customize
+  form's per-field image upload has no server-side equivalent input here; generating from an
+  uploaded/cropped image is out of scope for this endpoint since Templates, unlike the News photo
+  card, has no crop workflow to reproduce).
+- Resolution order per field, matching TemplatePreview.tsx's `values[field.key] ?? field.default ?? ''`:
+  request override → `field.default` → empty string.
+
+11. BROWSERSHOT SETTINGS
+- Viewport: `width: template.width, height: template.height` — the server renders at the template's
+  real pixel dimensions directly (unlike the client, which renders a scaled-down preview and
+  upsizes only at capture time via domToBlob's `scale` option). No CSS scaling step is needed
+  server-side.
+- `deviceScaleFactor: 1` by default, to match the client's actual output resolution exactly
+  (domToBlob's `scale` targets template.width × template.height at 1x, not a retina multiple).
+  Only raise this if a higher-resolution output than the existing client-generated images is
+  explicitly wanted — that would be a deliberate fidelity change, flag it rather than doing it
+  silently.
+- `->windowSize(width, height)`, `->setScreenshotType('png')` (client uses JPEG for upload-size
+  reasons on a screenshot of live DOM state; server-rendered HTML has no such constraint and PNG
+  avoids introducing a new lossy step — reconsider only if generated file size becomes a problem).
+- Screenshot the full page/root element (`->select('#template-root')` or full-page capture sized to
+  exactly the viewport, since the Blade root is authored at exact pixel dimensions — no extra
+  cropping needed).
+- `->showBackground()` / ensure background graphics are not stripped, since the whole card relies on
+  CSS-drawn backgrounds/colors, not just DOM content.
+- `->timeout(...)` generous enough for font/image loading + Chromium cold start (news-guide
+  precedent: a few tens of seconds is typical for this class of render).
+- `->noSandbox()`/`->setChromePath()` per §13 for a Linux VPS without a sandboxed Chrome install.
+
+12. WAIT STRATEGY
+- Use Browsershot's deterministic waits rather than an arbitrary sleep:
+  - `->waitUntilNetworkIdle()` (covers background/field images loading over HTTP).
+  - Inject/await a `document.fonts.ready` check (Browsershot supports `->evaluate()`/a wait
+    script) before the screenshot, to guarantee the Inter variable font has actually painted.
+- Do not add a hardcoded `sleep()`/`->setDelay()` as the primary strategy; a small delay as a final
+  safety margin after the above is acceptable but not sufficient on its own.
+
+13. CHROME CONFIGURATION
+Add to `.env` / `config/`:
+    BROWSERSHOT_CHROME_PATH=
+    BROWSERSHOT_NODE_BINARY=      (optional — only if node isn't reliably on PATH for the PHP process)
+    BROWSERSHOT_NPM_BINARY=       (optional, same reasoning)
+- Never hardcode a path like `/home/username/.cache/puppeteer/...` — read it from config
+  (`config/services.php` or a small dedicated `config/browsershot.php`) so it works unmodified
+  across dev/staging/VPS.
+- Document in the summary at the end of implementation which Chrome/Chrome-for-Testing version was
+  targeted and how it's installed on the VPS (this is an infra step outside the PHP codebase).
+
+14. STORAGE
+- `MediaHelperRepositoryInterface::upload()` requires an `UploadedFile`, but Browsershot returns
+  raw PNG bytes (`->save($tempPath)` or the bytes directly). Write the bytes to a temp file
+  (`tempnam(sys_get_temp_dir(), 'tpl_')` + `.png`), then wrap it:
+      new \Illuminate\Http\UploadedFile($tempPath, "{$uuid}.png", 'image/png', null, true)
+  and pass that into the existing `upload()` — this reuses the same storage/watermark/disk logic
+  every other upload in the app already goes through, instead of duplicating Storage::put calls.
+- Path convention: keep it identical to the existing client-generated path so both flows land in
+  the same place — `UtilsHelper::MonthYearWisePath('templates')` (i.e. `templates/{Y}/{m}/...`).
+  Do not invent a separate `photo-cards/{cardType}/...`-style convention for this module; there is
+  no "card type" concept here, only a single template per generation.
+- Delete the temp file after upload regardless of success/failure (try/finally).
+
+15. PERSISTENCE
+- Reuse the existing `template_generations` table/model as-is — it already has exactly
+  `template_id`, `user_id`, `path`, `values` — no new migration is required to store the result.
+  Reusing it also means API-generated images appear in the same "Your Generated Images" list
+  (GenerationsList.tsx) and are eligible for the existing "Make Post" flow
+  (`templates.generations.post`) without any frontend change.
+- Optional, only if distinguishing origin later turns out to matter: a nullable
+  `source` string column (`'client'` default / `'api'`) on `template_generations`. Do not add this
+  speculatively — only introduce it if there's a concrete need (e.g. surfacing "Generated via API"
+  in the UI); the base feature does not require it.
+
+16. RESPONSE
+Return, per §2: `url` (full public URL via `UtilsHelper::GetMediaUrl($path)`), `path` (storage
+path), `template_id`, `generation_id` (the new TemplateGeneration's id, so the same
+`templates.generations.post` endpoint can be called immediately after with it — mirrors how
+`freshGeneration`/`selectedGeneration` already flow into step 2 of edit.tsx for the client path).
+
+17. CONTROLLER
+`App\Http\Controllers\TemplateImageController` (new, separate from `TemplateController`):
+    public function generate(TemplateImageGenerateRequest $request, Template $template)
+    {
+        $result = $this->templateImageGenerationService->generate($template, $request->validated('values', []));
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Template image generated successfully.',
+            'data' => $result,
+        ]);
+    }
+Keep it this thin — no rendering/Browsershot/storage code in the controller.
+
+18. ERROR HANDLING
+Handle, returning clean JSON (never raw exception output/paths):
+- Unauthorized access to a private template (403, same rule as TemplateService::authorizeAccess).
+- Invalid `values` payload (422, via the form request).
+- Template with an empty/invalid `config` (no fields, malformed JSON) — 422/500 with a clear
+  message, logged with the template id.
+- Missing/unreachable background or field image URL — log and either fail clearly or render
+  without that image (decide one behavior, don't silently do both).
+- Browsershot/Chromium/Node failure or timeout — catch, log the underlying exception message with
+  template id + user id (mirror `TemplateService::generate`'s existing Log::error pattern), return
+  a generic 500 JSON message to the client.
+- Storage failure — same logging pattern as the existing `generate()` method already does for
+  `MediaHelperRepositoryInterface::upload()` failures.
+
+19. SECURITY
+- Endpoint is authenticated via the existing session `auth` middleware (§2) — no new auth surface.
+- Authorization: only the template's owner or a common template may be rendered/generated by the
+  requesting user (same rule as the existing flow).
+- Browsershot only ever renders the fixed, server-controlled `templates/render.blade.php` view
+  built from a validated `Template` + validated `values` strings — never arbitrary HTML or an
+  arbitrary URL. Do not accept a raw HTML or URL parameter from the request.
+
+20. PERFORMANCE
+- A Browsershot/Chromium launch is the expensive part; don't add extra launches beyond one per
+  request. Do not over-engineer this initially — no caching/dedup layer is required for a first
+  version, since (unlike the News photo-card's fixed asset set) `values` are free-form per request
+  and a "same card" cache-hit is uncommon.
+- Queueing: this app already has `QUEUE_CONNECTION=database` configured and a queue worker
+  convention elsewhere in the app — if generation latency turns out to be a UX problem, dispatching
+  the render to a queued job (endpoint returns a pending generation id, frontend polls) is a
+  reasonable follow-up, but is not required for the initial implementation; keep it synchronous
+  first, matching how `TemplateService::generate()` already works synchronously.
+
+21. TESTING
+At minimum:
+- Valid template + no `values` override → success, PNG created, `template_generations` row
+  created, response contains `url`/`path`/`template_id`/`generation_id`.
+- Valid template + `values` override → the override text appears in the rendered output (assert
+  on stored file size/existence; a full pixel-diff isn't necessary for a unit-level test).
+- Access to another user's private (non-common) template → 403.
+- Invalid `values.*` (non-string / over 2000 chars) → 422.
+- Template with an empty `config.fields` → still renders (background only), doesn't error.
+- If full Chromium execution is unsuitable for the normal test suite (CI without Chrome installed),
+  separate these into a distinct Chromium-dependent test group, consistent with how the reference
+  News photo-card guide (`Implement a server-side Photo Card image generation.txt`) recommends
+  isolating browser-integration tests.
+
+22. IMPLEMENTATION PRINCIPLE
+TemplatePreview.tsx + templates/pages/edit.tsx are the source of truth for both visual design and
+config semantics. Do not invent new config fields, new alignment behavior, or new text-truncation
+rules — reproduce exactly what the client already renders from the same `Template::config`, at the
+template's real pixel size, with the same font, same field ordering, same hidden-field handling,
+same background handling. The goal:
+
+    Client-side preview (TemplatePreview.tsx)
+            ≈
+    Server-side generated PNG (Browsershot)
+
+driven by the identical `config` JSON, with the API path fully independent of the existing
+client-upload path (§0 constraints) so neither can regress the other.
+
+SUMMARY TO PRODUCE AT THE END OF IMPLEMENTATION (once this guide is executed, not part of this doc):
+- files created (controller, services, request, Blade view, migration if `source` column is added)
+- files modified (routes/web.php only, plus composer.json/package.json/.env.example)
+- routes added
+- dependencies added (spatie/browsershot, puppeteer-core)
+- environment variables required (BROWSERSHOT_CHROME_PATH, optionally NODE/NPM binary overrides)
+- VPS requirements (Node.js, a Chrome/Chrome-for-Testing binary, its install path)
+- how to run/test the feature

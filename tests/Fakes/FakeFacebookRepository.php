@@ -34,4 +34,38 @@ class FakeFacebookRepository implements FacebookRepositoryInterface
     {
         return ['id' => 'fake_comment_'.uniqid()];
     }
+
+    public function getPagePosts(string $pageAccessToken, string $pageId): array
+    {
+        return [];
+    }
+
+    public function getPost(string $pageAccessToken, string $postId): array
+    {
+        return [
+            'id' => $postId,
+            'permalink_url' => "https://www.facebook.com/{$postId}",
+            'created_time' => now()->toIso8601String(),
+        ];
+    }
+
+    public function getPostComments(string $pageAccessToken, string $postId): array
+    {
+        return [];
+    }
+
+    public function getPageConversations(string $pageAccessToken, string $pageId): array
+    {
+        return [];
+    }
+
+    public function getConversationMessages(string $pageAccessToken, string $conversationId): array
+    {
+        return [];
+    }
+
+    public function sendMessage(string $pageAccessToken, string $pageId, string $recipientId, ?string $message = null, ?string $attachmentUrl = null): array
+    {
+        return ['recipient_id' => $recipientId, 'message_id' => 'fake_message_'.uniqid()];
+    }
 }

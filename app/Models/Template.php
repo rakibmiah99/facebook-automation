@@ -96,6 +96,13 @@ class Template extends Model
             if ($backgroundImageUrl) {
                 $config['fields'][$i]['style']['backgroundImage'] = "url('{$backgroundImageUrl}')";
             }
+
+            $parentBackgroundImagePath = UtilsHelper::ExtractCssUrl($field['parent_style']['backgroundImage'] ?? null);
+            $parentBackgroundImageUrl = $parentBackgroundImagePath ? UtilsHelper::GetMediaUrl($parentBackgroundImagePath) : null;
+
+            if ($parentBackgroundImageUrl) {
+                $config['fields'][$i]['parent_style']['backgroundImage'] = "url('{$parentBackgroundImageUrl}')";
+            }
         }
 
         return $config;

@@ -70,7 +70,7 @@
    generated image will, instead of drifting from whatever weight the Bunny-hosted Inter build happens to ship. */
 @font-face {
     font-family: 'Template Render Font';
-    src: url('../fonts/Inter-Variable.ttf') format('truetype');
+    src: url('../fonts/sorolota-regular.ttf') format('truetype');
     font-weight: 100 900;
     font-style: normal;
     font-display: swap;

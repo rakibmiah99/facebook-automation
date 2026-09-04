@@ -16,7 +16,10 @@ interface TemplatePreviewProps {
 
 // Pixel-based style properties that need to be scaled down to the container's rendered size —
 // the config itself is always authored in the template's real pixel dimensions.
-const SCALED_KEYS = ['top', 'left', 'right', 'bottom', 'width', 'height', 'fontSize', 'borderWidth', 'borderRadius', 'padding'] as const;
+const SCALED_KEYS = [
+    'top', 'left', 'right', 'bottom', 'width', 'height', 'fontSize', 'borderWidth', 'borderRadius', 'padding',
+    'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+] as const;
 
 /**
  * A plain number or a "*px" string is template-pixel-space and needs scaling down to the
@@ -110,6 +113,11 @@ const TemplatePreview = forwardRef<HTMLDivElement, TemplatePreviewProps>(functio
 
             {config.fields?.map((field) => {
                 const style = scaledStyle(field.style, scale);
+                // Absent by default → a plain, unstyled, non-positioned wrapper (zero layout
+                // effect — existing configs without parent_style render pixel-identical to
+                // before). Set → promoted to an absolutely positioned box on the canvas, same
+                // coordinate space as `style`.
+                const parentStyle = field.parent_style ? scaledStyle(field.parent_style, scale) : undefined;
                 const hiddenOutline: React.CSSProperties = field.hidden && revealHidden
                     ? { outline: '1px dashed var(--color-warning)', outlineOffset: 2 }
                     : {};
@@ -123,43 +131,40 @@ const TemplatePreview = forwardRef<HTMLDivElement, TemplatePreviewProps>(functio
                     </span>
                 );
 
-                if (field.type === 'image') {
-                    const src = imagePreviews[field.key] ?? field.default_url ?? undefined;
-
-                    return (
+                const fieldElement =
+                    field.type === 'image' ? (
                         <div
-                            key={field.key}
                             className="absolute overflow-hidden box-border"
                             style={{ ...style, ...hiddenOutline, background: field.style.backgroundColor ?? 'rgba(0,0,0,0.05)' }}
                         >
                             {hiddenBadge}
-                            {src && (
+                            {(imagePreviews[field.key] ?? field.default_url) && (
                                 <img
-                                    src={src}
+                                    src={imagePreviews[field.key] ?? field.default_url ?? undefined}
                                     alt={field.label}
                                     className="w-full h-full"
                                     style={{ objectFit: field.style.objectFit ?? 'cover' }}
                                 />
                             )}
                         </div>
+                    ) : (
+                        <div
+                            className="absolute whitespace-pre-wrap box-border"
+                            style={{
+                                fontFamily: TEMPLATE_FONT_FAMILY,
+                                lineHeight: DEFAULT_LINE_HEIGHT,
+                                ...style,
+                                ...hiddenOutline,
+                            }}
+                        >
+                            {hiddenBadge}
+                            {values[field.key] ?? field.default ?? ''}
+                        </div>
                     );
-                }
-
-                const text = values[field.key] ?? field.default ?? '';
 
                 return (
-                    <div
-                        key={field.key}
-                        className="absolute whitespace-pre-wrap box-border"
-                        style={{
-                            fontFamily: TEMPLATE_FONT_FAMILY,
-                            lineHeight: DEFAULT_LINE_HEIGHT,
-                            ...style,
-                            ...hiddenOutline,
-                        }}
-                    >
-                        {hiddenBadge}
-                        {text}
+                    <div key={field.key} className={parentStyle ? 'absolute box-border' : undefined} style={parentStyle}>
+                        {fieldElement}
                     </div>
                 );
             })}

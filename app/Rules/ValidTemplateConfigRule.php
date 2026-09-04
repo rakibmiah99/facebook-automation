@@ -103,5 +103,9 @@ class ValidTemplateConfigRule implements ValidationRule
         if (! is_array($field['style'] ?? null)) {
             $fail("The :attribute fields.{$index}.style is required.");
         }
+
+        if (array_key_exists('parent_style', $field) && $field['parent_style'] !== null && ! is_array($field['parent_style'])) {
+            $fail("The :attribute fields.{$index}.parent_style must be an object.");
+        }
     }
 }

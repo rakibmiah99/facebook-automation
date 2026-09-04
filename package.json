@@ -21,10 +21,15 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
+        "@codemirror/lang-json": "^6.0.2",
+        "@codemirror/language": "^6.12.4",
         "@inertiajs/react": "^3.6.1",
         "@inertiajs/vite": "^3.6.1",
+        "@lezer/highlight": "^1.2.3",
+        "@uiw/react-codemirror": "^4.25.11",
         "lucide-react": "^0.545.0",
         "modern-screenshot": "^4.7.0",
+        "puppeteer": "npm:puppeteer-core@^25.10.0",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "ziggy-js": "^2.6.3"

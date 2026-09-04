@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Http\Requests\FacebookAppStoreRequest;
 use App\Http\Requests\FacebookAppUpdateRequest;
 use App\Models\FacebookApp;
+use App\Models\FacebookAppAccount;
 use App\Repositories\FacebookRepositoryInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 
@@ -24,6 +26,31 @@ class FacebookAppService
                 ->latest()
                 ->get(),
         ];
+    }
+
+    /**
+     * The caller's own apps plus each app's accounts (has-many), for API consumers — a minimal
+     * projection rather than the full models `index()` returns for the web UI: just enough to
+     * identify an app and pick one of its Pages by id.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function listForApi(int $userId): Collection
+    {
+        return FacebookApp::query()
+            ->where('user_id', $userId)
+            ->with('accounts:id,facebook_app_id,account_name')
+            ->latest()
+            ->get()
+            ->map(fn (FacebookApp $app) => [
+                'id' => $app->id,
+                'app_name' => $app->app_name,
+                'status' => $app->status,
+                'accounts' => $app->accounts->map(fn (FacebookAppAccount $account) => [
+                    'id' => $account->id,
+                    'account_name' => $account->account_name,
+                ]),
+            ]);
     }
 
     public function store(FacebookAppStoreRequest $request): FacebookApp

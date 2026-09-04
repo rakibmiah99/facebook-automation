@@ -1,0 +1,431 @@
+Implement a server-side Photo Card image generation system:
+Spatie Browsershot + Puppeteer + Chromium.
+
+IMPORTANT:
+- First inspect the existing project architecture, especially the current client-side photo-card implementation.
+- Do NOT redesign the photo card.
+- Do NOT replace the existing client-side implementation unless explicitly required.
+- The primary goal is to generate the SAME photo card on the server with maximum visual fidelity.
+- Reuse the existing photo-card design, dimensions, typography, spacing, colors, images, background textures, logo, title positioning, date formatting, footer, border radius, shadows, etc.
+- Avoid introducing unnecessary dependencies.
+- Do not modify unrelated parts of the project.
+
+CURRENT CLIENT-SIDE PHOTO CARD:
+The existing photo cards are implemented in:
+
+resources/js/modules/news/pages/photo-card/
+
+Relevant variants include:
+- portrait.tsx
+- portrait-red.tsx
+- portrait-black.tsx
+- portrait-dark.tsx
+
+The current implementation renders the card in the browser using React + CSS/Tailwind and uses modern-screenshot/domToPng() to generate the downloadable PNG.
+
+SERVER-SIDE GOAL:
+Create a server-side generation flow that receives a News record and card type, renders an equivalent HTML/CSS photo-card template, uses Browsershot/Puppeteer/Chromium to capture it as a PNG, stores the generated image, and returns its URL/path through an API response.
+
+REQUIREMENTS:
+
+1. BROWSERSHOT
+- Use Spatie Browsershot.
+- Use Puppeteer as the browser automation layer.
+- Use Chromium/Chrome for Testing installed on the production VPS.
+- Configure Browsershot so the Chrome executable path can be supplied through environment configuration.
+- Do not hard-code server-specific Chrome paths.
+- The implementation must work on a Linux VPS.
+
+2. API ENDPOINT
+Create an authenticated POST endpoint similar to:
+
+POST /admin/news/{news}/photo-card/{cardType}/generate
+
+Supported card types:
+
+- portrait
+- portrait-red
+- portrait-black
+- portrait-dark
+
+Validate cardType using an appropriate Laravel validation strategy.
+
+The API should return a predictable JSON structure such as:
+
+{
+    "status": true,
+    "message": "Photo card generated successfully.",
+    "data": {
+        "url": "...",
+        "path": "...",
+        "card_type": "portrait"
+    }
+}
+
+3. SERVICE ARCHITECTURE
+Do not put the complete photo-card generation logic inside NewsController.
+
+Create a dedicated service, for example:
+
+App\Services\Admin\PhotoCardImageService
+
+Responsibilities of the service:
+
+- receive News and card type
+- prepare the photo-card data
+- resolve the correct template
+- render the HTML
+- execute Browsershot
+- generate PNG
+- store the image
+- return generated path and URL
+
+Keep controller responsibilities minimal.
+
+4. HTML TEMPLATE
+Create dedicated server-side templates for the photo cards.
+
+Prefer Blade templates or another maintainable server-side HTML representation.
+
+The template must reproduce the existing React photo-card design as closely as possible.
+
+The four variants must preserve their existing visual differences.
+
+Do NOT approximate the design.
+
+Inspect the existing React/Tailwind implementation and reproduce:
+
+- card dimensions
+- background/noise texture
+- logo
+- news image
+- image crop
+- image positioning
+- border radius
+- shadows
+- title
+- title font
+- title size
+- line height
+- maximum number of title lines
+- date
+- footer URL
+- spacing
+- padding
+- alignment
+- colors
+- opacity
+- gradients
+- overlays
+- all variant-specific differences
+
+5. IMAGE HANDLING
+The generated photo card must use the same news image currently used by the frontend.
+
+Because the server-side browser must be able to access the image:
+
+- Do not rely on browser-only local assets.
+- Make sure image URLs are accessible to Chromium.
+- If the project already has a same-origin image proxy route such as photoCardImage(), reuse it where appropriate.
+- Prefer same-origin image URLs when necessary to avoid CORS/canvas-related problems.
+- Do not expose private storage unnecessarily.
+
+If the existing project already has an image-serving method that streams the News image from storage, reuse it instead of duplicating the storage logic.
+
+6. ASSETS
+Existing frontend assets may currently live under resources/js/modules/news/images/.
+
+Do not assume those Vite-imported assets are directly accessible to server-side rendering.
+
+Determine the correct strategy for server-side access.
+
+Possible approaches:
+- use public/static copies
+- use Laravel public paths
+- use generated asset URLs
+- use Vite-built asset URLs
+
+Choose the approach that best matches the existing project architecture.
+
+The same visual assets must be used.
+
+7. FONT
+The photo card must use the same Bengali font currently used by the frontend.
+
+The existing project contains:
+
+resources/fonts/sorolota-regular.ttf
+
+Ensure Chromium can load this font during server-side rendering.
+
+Do not silently replace it with a system font.
+
+If necessary, use a server-accessible font URL or an appropriate @font-face declaration.
+
+8. BANGLA TEXT
+The title is Bengali news text.
+
+The server-rendered card must visually match the browser version.
+
+Do NOT manually implement GD-style text wrapping.
+
+Let Chromium/CSS perform text layout wherever possible.
+
+Reproduce the existing:
+
+- line-clamp behavior
+- font size
+- line height
+- letter spacing
+- text width
+- overflow behavior
+- ellipsis behavior
+
+Use CSS such as line-clamp if that matches the existing implementation.
+
+9. BANGLA DATE
+Reuse the project's existing date-formatting behavior if possible.
+
+The generated card must display the same Bangla date as the client-side card.
+
+Do not introduce a new date package unless absolutely necessary.
+
+If the frontend already has a reusable date formatter, inspect it and reproduce the same output server-side.
+
+10. CROPPED NEWS IMAGE
+The existing frontend contains an image crop workflow.
+
+Inspect the current ImageTemplateCropModal and determine how the crop information is represented.
+
+The server-side API must support the existing crop behavior.
+
+Do not remove or break the current crop UI.
+
+If the frontend already has an uploaded/cropped image or crop coordinates, determine the cleanest way to pass that information to the server.
+
+The server-generated result should visually match the user's selected crop.
+
+11. BROWSERSHOT SETTINGS
+Configure Browsershot for the exact photo-card dimensions.
+
+The current frontend capture uses approximately:
+
+viewport:
+width: 560
+height: 700
+
+deviceScaleFactor:
+2
+
+The server-side implementation should preserve the equivalent output resolution.
+
+The final PNG should therefore represent the same high-resolution card produced by the existing client-side implementation.
+
+Use appropriate Browsershot settings for:
+
+- viewport
+- device scale factor
+- screenshot format
+- full page/element capture
+- timeout
+- background graphics
+- JavaScript execution
+- font loading
+
+Make sure CSS backgrounds and images are included in the screenshot.
+
+12. WAIT FOR ASSETS
+The screenshot must not happen before:
+
+- fonts are loaded
+- images are loaded
+- CSS is applied
+- JavaScript-dependent rendering, if any, is complete
+
+Use an appropriate Browsershot/Puppeteer wait strategy.
+
+Do not rely on arbitrary short sleeps if a deterministic wait condition can be used.
+
+13. CHROME CONFIGURATION
+Add environment configuration such as:
+
+BROWSERSHOT_CHROME_PATH=
+
+Do not hard-code:
+
+/home/username/.cache/puppeteer/...
+
+The VPS-specific path must come from .env/configuration.
+
+Also make the Puppeteer/Node environment configurable where necessary.
+
+14. STORAGE
+After screenshot generation:
+
+- save the PNG using Laravel Storage
+- use a clean path convention
+
+Example:
+
+photo-cards/{cardType}/{Y}/{m}/{uuid}.png
+
+Use the project's existing storage conventions/helpers where appropriate.
+
+Do not unnecessarily add a database column to News.
+
+If generated cards need history/re-download support, consider a dedicated photo_cards table, but only introduce this if the existing architecture requires persistent history.
+
+15. RESPONSE
+Return:
+
+- generated image URL
+- storage path
+- card type
+- optionally news ID
+
+The frontend should be able to immediately use the returned URL.
+
+16. FRONTEND INTEGRATION
+Do not remove the existing client-side download immediately.
+
+Add a server-generation action separately, for example:
+
+Generate Photo Card
+
+Flow:
+
+User opens photo card
+        ↓
+User selects card variant/crop
+        ↓
+User clicks Generate
+        ↓
+POST API
+        ↓
+Laravel
+        ↓
+PhotoCardImageService
+        ↓
+Blade/HTML template
+        ↓
+Browsershot
+        ↓
+Puppeteer
+        ↓
+Chromium
+        ↓
+PNG
+        ↓
+Storage
+        ↓
+JSON response
+        ↓
+Frontend displays/downloads generated image
+
+17. ERROR HANDLING
+Handle:
+
+- missing News image
+- invalid card type
+- storage failure
+- template rendering failure
+- Chromium failure
+- Puppeteer failure
+- timeout
+- inaccessible image
+- font loading failure
+
+Return clean Laravel JSON errors.
+
+Do not expose sensitive server paths or internal command output to the frontend.
+
+Log detailed technical errors server-side.
+
+18. SECURITY
+The endpoint must be authenticated and authorized.
+
+Do not allow arbitrary HTML or arbitrary URLs to be passed to Browsershot.
+
+Do not allow users to make the server screenshot arbitrary external websites.
+
+The browser should render only the controlled photo-card template.
+
+19. PERFORMANCE
+Browsershot is resource-heavy.
+
+Design the implementation so that:
+
+- unnecessary browser launches are avoided where practical
+- image generation timeout is controlled
+- generated files are cached/reused when appropriate
+- repeated generation of the exact same card can optionally reuse the existing generated asset
+
+Do not over-engineer this initially.
+
+20. TESTING
+Add appropriate feature/service tests.
+
+At minimum verify:
+
+- valid News + cardType returns success
+- invalid cardType returns validation error
+- missing image returns appropriate error
+- generated PNG is actually created
+- storage path is correct
+- API returns URL/path
+- all four card variants can be generated
+
+If full Chromium testing is unsuitable for automated tests, separate browser integration tests from normal Laravel tests.
+
+21. IMPLEMENTATION PRINCIPLE
+The existing React photo card is the source of truth for visual design.
+
+Do not recreate the design from memory.
+
+Inspect the existing:
+
+- portrait.tsx
+- portrait-red.tsx
+- portrait-black.tsx
+- portrait-dark.tsx
+- ImageTemplateCropModal
+- existing image URL handling
+- existing Bangla date formatter
+- existing logo/noise assets
+- existing CSS/font configuration
+
+Then build the server-side HTML/CSS equivalent.
+
+The goal is:
+
+Client-side preview
+        ≈
+Server-side generated PNG
+
+with the highest possible visual fidelity.
+
+22. IMPORTANT
+Before modifying files:
+
+- inspect the project
+- identify existing reusable helpers/services
+- identify existing routes
+- identify existing NewsController methods
+- identify existing storage/media helpers
+- identify existing photo-card components
+- identify existing date formatting
+- identify existing crop state/data
+- identify existing asset paths
+
+Avoid duplicate implementations when reusable project code already exists.
+
+Do not change unrelated functionality.
+
+At the end, provide a concise summary of:
+- files created
+- files modified
+- routes added
+- dependencies added/changed
+- environment variables required
+- VPS requirements
+- how to run/test the feature

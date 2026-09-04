@@ -40,6 +40,17 @@ export interface TemplateFieldStyle {
     /** Preview-only — the server renderer draws square corners. */
     borderRadius?: Length;
     padding?: Length;
+    margin?: Length;
+    marginTop?: Length;
+    marginRight?: Length;
+    marginBottom?: Length;
+    marginLeft?: Length;
+    /** Stacking order relative to sibling fields/wrappers — matters since every field/wrapper is
+     *  position: absolute, so paint order otherwise falls back to `fields` array order. */
+    zIndex?: number;
+    /** Raw CSS `box-shadow` shorthand, e.g. `"0px 6px 12px -2px rgba(0,0,0,0.25)"` — passed
+     *  through as-is (not length-scaled) on both the preview and the generated image. */
+    boxShadow?: string;
     /** Image fields only. */
     objectFit?: 'cover' | 'contain';
 }
@@ -57,6 +68,15 @@ export interface TemplateField {
      *  `revealHidden` on TemplatePreview only adds the admin-only outline/"Hidden" badge on top. */
     hidden?: boolean;
     style: TemplateFieldStyle;
+    /** Optional styling for the wrapper `<div>` this field is rendered inside — same style
+     *  vocabulary as `style`, lets a field have its own positioned/decorated container (e.g. a
+     *  background band or border) independent of the field's own box. Absent by default, which
+     *  renders a plain, unstyled, non-positioned wrapper with no effect on layout — existing
+     *  configs render unchanged. Setting any box property (top/left/right/bottom/width/height)
+     *  promotes the wrapper to an absolutely positioned box on the canvas, same coordinate space
+     *  as `style` — the field's own `style` then positions/sizes it *within* that wrapper.
+     *  See TemplateRenderService's resolveParentBox for the server-side equivalent. */
+    parent_style?: TemplateFieldStyle;
 }
 
 export interface TemplateBackground {
