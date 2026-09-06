@@ -1,0 +1,127 @@
+IMAGE GENERATION REPORT — LOGO NOT APPEARING IN THE GENERATED IMAGE
+Config investigated: the `logo_container` / `pattern_overlay` / `thumbnail_image` / `headline`
+template config pasted by the user.
+
+STATUS: Reproduced and confirmed. Root cause found and verified with concrete evidence below.
+This report only diagnoses the issue — no code was changed.
+
+═══════════════════════════════════════════════════════════════════════════
+SUMMARY
+═══════════════════════════════════════════════════════════════════════════
+
+The logo does render correctly in the browser (the customize page's live preview), but is
+completely missing from the server-generated (Browsershot) image. This is a real bug — a gap
+between what the client-side preview (TemplatePreview.tsx) supports and what the server-side
+renderer (TemplateRenderService.php / render.blade.php) supports. Two properties used in your
+`parent_style` — `zIndex` and `marginTop` — are silently dropped on the server but honored in the
+browser, and that's what's hiding the logo.
+
+Proof (same config, same generation call, both captured for this report):
+
+  Client-side preview (browser):        Server-generated image (Browsershot API):
+  Logo clearly visible, centered              Logo completely absent — only the
+  at the top, on top of the                   pattern_overlay texture and the
+  pattern_overlay texture.                    headline text are visible.
+
+═══════════════════════════════════════════════════════════════════════════
+ROOT CAUSE
+═══════════════════════════════════════════════════════════════════════════
+
+Your `logo_container` field relies on `parent_style.zIndex: 1` to sit *above*
+`pattern_overlay` — which is a full-canvas (1080×1350) image declared right after it in the
+`fields` array and would otherwise cover it.
+
+`TemplateRenderService::resolveParentBox()` (the server-side equivalent of TemplatePreview.tsx's
+`scaledStyle()`) only understands a fixed, explicit list of CSS properties: top/left/right/bottom/
+width/height, color, fontSize, textAlign, display+alignItems+justifyContent (flex only),
+backgroundColor, backgroundImage, borderColor, borderWidth, padding. `zIndex` is not one of them —
+it is silently dropped.
+
+I confirmed this directly by generating your exact config and inspecting the actual resolved CSS
+the server produced for `logo_container`'s wrapper:
+
+    position: absolute; box-sizing: border-box; width: 100%; height: 200px;
+    display: flex; align-items: center; justify-content: center;
+
+`zIndex: 1` and `marginTop: "10px"` from your JSON are nowhere in that output — they never reached
+the generated HTML at all.
+
+Meanwhile, `TemplatePreview.tsx` (the browser preview) applies `parent_style` via a plain object
+spread (`{...style}`) with no such restriction — every property you write, including `zIndex` and
+`marginTop`, is passed straight through to the DOM. That's why the browser preview shows the logo
+correctly (z-index actually stacks it above the pattern overlay there) while the generated image
+does not (no z-index means default paint order applies instead).
+
+Default paint order = DOM/array order. Your `fields` array lists `logo_container` first and
+`pattern_overlay` second. With no z-index to override that, `pattern_overlay` — a full-canvas image
+— paints on top of and completely covers `logo_container` in the generated image. This matches
+exactly what the reproduction shows: only the pattern_overlay texture and the headline are visible;
+the logo is nowhere in the output.
+
+═══════════════════════════════════════════════════════════════════════════
+CONTRIBUTING ISSUES FOUND IN THE SAME CONFIG
+═══════════════════════════════════════════════════════════════════════════
+
+These didn't cause the "logo missing entirely" symptom on their own, but they're real gaps and
+would affect other parts of this same design once the main issue is fixed:
+
+1. `marginTop` — same problem as `zIndex`: not in the server's supported property list, so it's
+   dropped there but honored in the browser. Affects both `logo_container.parent_style.marginTop`
+   and `thumbnail_image.parent_style.marginTop`. Positioning will look different (unmargined,
+   pinned differently) between the preview and the generated image until this is addressed.
+
+2. Centering via `parent_style` flex only works for content that isn't itself absolutely
+   positioned — but every field's own box (the `style` box) is *always* rendered as
+   `position: absolute`, in both the browser preview and the server render (this is by design —
+   fields are normally placed with explicit `top`/`left` coordinates). A flex container's
+   `align-items`/`justify-content` has no effect on an absolutely positioned child per the CSS
+   spec, full stop — this is true in the browser too, not just the server.
+   Concretely: `logo_container.style` and `thumbnail_image.style` set no `top`/`left` of their
+   own and rely on `parent_style`'s `display: flex` + `alignItems`/`justifyContent: center` to
+   center them — this does not actually center them anywhere (verified: the resolved CSS for both
+   fields' own boxes has no top/left, meaning they fall back to the browser's default
+   "static position" instead of being flex-centered). If you want a field centered/filled inside
+   its `parent_style` frame, give the field's own `style` explicit
+   `top: 0, left: 0, width: "100%", height: "100%"` instead of leaning on the parent's flex
+   alignment — that reliably fills the frame regardless of z-index/paint-order.
+
+3. `thumbnail_image.style` has `"box-shadow"` (kebab-case). This is not a valid property name for
+   either the browser preview (React's inline `style` object requires camelCase — `boxShadow` — a
+   literal `"box-shadow"` key is silently a no-op in the DOM) or the server renderer (box-shadow
+   isn't a supported/resolved style property there either way, correctly cased or not). Right now
+   this shadow has no effect anywhere. `box-shadow`/`boxShadow` is not currently a documented or
+   implemented field-style property at all.
+
+4. `thumbnail_image` has no `default` and is `editable: true` — with no `values.thumbnail_image`
+   override supplied at generate time, it has no image to show. Expected behavior, not a bug — just
+   noting it since it's also invisible in the reproduction for this (unrelated, correct) reason.
+
+═══════════════════════════════════════════════════════════════════════════
+IMMEDIATE WORKAROUNDS (config-only, no code change needed)
+═══════════════════════════════════════════════════════════════════════════
+
+- Reorder `fields` so `logo_container` comes *after* `pattern_overlay` in the array. Paint order
+  follows array order when there's no z-index to override it, so the later element wins the
+  stacking and will sit on top.
+- Give `logo_container.style` explicit `top`/`left` (e.g. `"top": 0, "left": "50%"` with a
+  translate, or just `top`/`left` matching where you want it) instead of depending on
+  `parent_style`'s flex centering — that positions it directly rather than relying on a layout
+  mechanism (flex alignment) that doesn't apply to it.
+- Drop `zIndex`/`marginTop` from `parent_style` for now (fields relying on it) since they're
+  currently no-ops server-side — better to know they're inert than assume they're working.
+- Fix `"box-shadow"` → `"boxShadow"` if/when this property is supported (see below — it currently
+  isn't, in either environment).
+
+═══════════════════════════════════════════════════════════════════════════
+RECOMMENDED FIX (not implemented — diagnosis only, per what was asked)
+═══════════════════════════════════════════════════════════════════════════
+
+Add `zIndex` (and ideally `margin`/`marginTop`/`marginBottom`/`marginLeft`/`marginRight`) to the
+property allowlist in `TemplateRenderService::resolveBox()` and `resolveParentBox()`
+(app/Services/TemplateRenderService.php), the same way `borderColor`/`borderWidth`/`padding` are
+already handled — a plain `isset($style['zIndex'])` check adding `z-index: {value};` to the
+resolved CSS. This closes the gap with `TemplatePreview.tsx`, which already supports these for
+free via its unrestricted object spread. `box-shadow` would need to be added as a genuinely new
+property on both sides (client spread already accepts it if correctly cased as `boxShadow`; the
+server has no handling for it at all yet) if it's meant to be a supported design property going
+forward — right now it isn't documented in template-json-guideline.md either.

@@ -70,8 +70,27 @@
    generated image will, instead of drifting from whatever weight the Bunny-hosted Inter build happens to ship. */
 @font-face {
     font-family: 'Template Render Font';
-    src: url('../fonts/sorolota-regular.ttf') format('truetype');
+    src: url('../fonts/Inter-Variable.ttf') format('truetype');
     font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Selectable via a field's `style.fontFamily` in a template's config (see
+   template-json-guideline.md) — same bytes embedded server-side by
+   TemplateImageGenerationService so the generated image matches this preview exactly. */
+@font-face {
+    font-family: 'Sorolota';
+    src: url('../fonts/sorolota-regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Sorolota Italic';
+    src: url('../fonts/sorolota-italic.ttf') format('truetype');
+    font-weight: normal;
     font-style: normal;
     font-display: swap;
 }

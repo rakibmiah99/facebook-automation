@@ -25,6 +25,10 @@ export interface TemplateFieldStyle {
     height?: Length;
     color?: string;
     fontSize?: Length;
+    /** Defaults to the standard Inter typeface ('Template Render Font') when omitted. Set to
+     *  `'Sorolota'` or `'Sorolota Italic'` to use one of the custom fonts declared in
+     *  resources/css/app.css / render.blade.php — see template-json-guideline.md. */
+    fontFamily?: string;
     textAlign?: 'left' | 'center' | 'right';
     /** Switches a text field to flexbox alignment via alignItems/justifyContent instead of
      *  textAlign's always-top-anchored default — see TemplateRenderService's mapFlexAlign. */

@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <style>
+    {{-- 100 900 declares the face as covering that whole weight range — required for
+         'Template Render Font' (a variable font) and harmless for the static Sorolota faces,
+         which then just match any requested weight instead of only an exact one. --}}
+    @foreach($fontDataUris as $fontFamilyName => $fontDataUri)
     @font-face {
-        font-family: 'Template Render Font';
+        font-family: '{{ $fontFamilyName }}';
         src: url('{{ $fontDataUri }}') format('truetype');
         font-weight: 100 900;
         font-style: normal;
     }
+    @endforeach
 
     * {
         margin: 0;

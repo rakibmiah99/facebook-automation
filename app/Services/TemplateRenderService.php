@@ -120,7 +120,7 @@ class TemplateRenderService
             $css['background-color'] = $style['backgroundColor'] ?? 'rgba(0,0,0,0.05)';
         } else {
             $css['white-space'] = 'pre-wrap';
-            $css['font-family'] = self::FONT_FAMILY;
+            $css['font-family'] = $style['fontFamily'] ?? self::FONT_FAMILY;
             $css['line-height'] = (string) ($style['lineHeight'] ?? self::DEFAULT_LINE_HEIGHT);
 
             if (isset($style['color'])) {
@@ -204,6 +204,10 @@ class TemplateRenderService
 
         if (isset($parentStyle['color'])) {
             $css['color'] = $parentStyle['color'];
+        }
+
+        if (isset($parentStyle['fontFamily'])) {
+            $css['font-family'] = $parentStyle['fontFamily'];
         }
 
         if (isset($parentStyle['fontSize'])) {

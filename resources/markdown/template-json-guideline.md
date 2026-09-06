@@ -62,6 +62,7 @@ Every key is a real CSS property name (camelCase). Plain numbers are pixels in t
 | `right` / `bottom` | text, image | position from the opposite edge; pair with `left`/`top` to derive `width`/`height` from the gap |
 | `width` / `height` | text, image | required for image fields; on text, `height` only affects the box, not wrapping. Omit to shrink-to-fit |
 | `color` | text | text color |
+| `fontFamily` | text | defaults to Inter if omitted. `"Sorolota"` or `"Sorolota Italic"` for the custom fonts — see **Fonts** below |
 | `fontSize` | text | plain number or `"Npx"` |
 | `textAlign` | text | `"left"` / `"center"` / `"right"` — ignored when `display: "flex"` |
 | `display` | text | `"flex"` switches alignment to `alignItems`/`justifyContent` |
@@ -77,6 +78,30 @@ Every key is a real CSS property name (camelCase). Plain numbers are pixels in t
 | `zIndex` | text, image | stacking order. Every field/wrapper is individually positioned, so with no `zIndex` a later field in the `fields` array paints over an earlier one — set this whenever two fields' boxes can overlap and a specific one needs to stay on top |
 | `boxShadow` | text, image | raw CSS `box-shadow` value, e.g. `"0px 6px 12px -2px rgba(0,0,0,0.25)"` — used as-is, not scaled |
 | `objectFit` | image | `"cover"` (default) or `"contain"` |
+
+## Fonts
+
+Every text field uses Inter by default — no `fontFamily` needed. Two more fonts are available by
+name, set `style.fontFamily` (or `parent_style.fontFamily`) to one of:
+
+| `fontFamily` value | Font file |
+| --- | --- |
+| *(omitted)* | Inter (`resources/fonts/Inter-Variable.ttf`) — the default |
+| `"Sorolota"` | `resources/fonts/sorolota-regular.ttf` |
+| `"Sorolota Italic"` | `resources/fonts/sorolota-italic.ttf` |
+
+```json
+{ "key": "headline", "type": "text", "style": { "fontFamily": "Sorolota", "fontSize": 48, "color": "#ffffff" } }
+```
+
+These are real, separate font names (not a `fontStyle: "italic"` switch) — pick whichever one you
+want directly. The same font bytes are embedded in both the live preview
+(`resources/css/app.css`) and the generated image (`TemplateImageGenerationService`), so what you
+see while customizing is exactly what gets generated.
+
+Adding another font later means: drop the file in `resources/fonts/`, add a matching `@font-face`
+in `resources/css/app.css`, and add it to `TemplateImageGenerationService::fontDataUris()` under
+the same `font-family` name — a code change, not something configurable from `config` alone.
 
 ## Parent style
 

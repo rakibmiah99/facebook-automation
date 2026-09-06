@@ -135,7 +135,7 @@ class TemplateImageGenerationService
 
         $html = view('templates.render', [
             'model' => $model,
-            'fontDataUri' => $this->fontDataUri(),
+            'fontDataUris' => $this->fontDataUris(),
         ])->render();
 
         $tempPath = tempnam(sys_get_temp_dir(), 'template_image_').'.png';
@@ -279,9 +279,26 @@ class TemplateImageGenerationService
         $browsershot->save($targetPath);
     }
 
-    private function fontDataUri(): string
+    /**
+     * Embeds every font a field's `style.fontFamily` can select (see
+     * template-json-guideline.md) as a base64 data URI, keyed by the exact @font-face
+     * `font-family` name used in both resources/css/app.css and render.blade.php — the same
+     * bytes in both places is what keeps this preview and the generated image identical.
+     *
+     * @return array<string, string>
+     */
+    private function fontDataUris(): array
     {
-        $bytes = file_get_contents(resource_path('fonts/Inter-Variable.ttf'));
+        return [
+            'Template Render Font' => $this->encodeFontAsDataUri('Inter-Variable.ttf'),
+            'Sorolota' => $this->encodeFontAsDataUri('sorolota-regular.ttf'),
+            'Sorolota Italic' => $this->encodeFontAsDataUri('sorolota-italic.ttf'),
+        ];
+    }
+
+    private function encodeFontAsDataUri(string $filename): string
+    {
+        $bytes = file_get_contents(resource_path("fonts/{$filename}"));
 
         return 'data:font/ttf;base64,'.base64_encode($bytes);
     }
