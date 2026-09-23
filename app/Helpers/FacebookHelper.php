@@ -112,6 +112,32 @@ class FacebookHelper implements FacebookRepositoryInterface
         return $response->json();
     }
 
+    public function createScheduledImagePost(string $pageAccessToken, string $pageId, string $imageUrl, ?string $caption, int $scheduledPublishTime): array
+    {
+        $response = Http::withToken($pageAccessToken)->post("{$this->baseUrl}/{$pageId}/photos", array_filter([
+            'url' => $imageUrl,
+            'caption' => $caption,
+            // Form-encoded, so booleans must be sent as the literal string 'false' — a real
+            // `false` here would get stripped by array_filter() like any other falsy value.
+            'published' => 'false',
+            'scheduled_publish_time' => $scheduledPublishTime,
+        ]));
+
+        if ($response->failed()) {
+            $this->logFailure("{$pageId}/photos (scheduled)", $response, [
+                'page_id' => $pageId,
+                'image_url' => $imageUrl,
+                'scheduled_publish_time' => $scheduledPublishTime,
+            ]);
+
+            throw new RuntimeException(
+                $response->json('error.message') ?? 'Failed to schedule the image post on Facebook.'
+            );
+        }
+
+        return $response->json();
+    }
+
     public function createComment(string $pageAccessToken, string $objectId, ?string $message = null, ?string $attachmentUrl = null): array
     {
         $response = Http::withToken($pageAccessToken)->post("{$this->baseUrl}/{$objectId}/comments", array_filter([

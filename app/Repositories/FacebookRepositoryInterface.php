@@ -33,6 +33,18 @@ interface FacebookRepositoryInterface
     public function createImagePost(string $pageAccessToken, string $pageId, string $imageUrl, ?string $caption = null): array;
 
     /**
+     * Schedule an image post on a Facebook Page to publish automatically at a future time,
+     * using Facebook's own native scheduling contract (`published=false` +
+     * `scheduled_publish_time`) rather than any local-only scheduling flag. Facebook assigns and
+     * returns the post's final id immediately and publishes it itself at $scheduledPublishTime —
+     * no further action is needed on our side.
+     *
+     * @param  int  $scheduledPublishTime  Unix timestamp; Facebook requires 10 minutes to 75 days from now.
+     * @return array{id: string, post_id?: string}
+     */
+    public function createScheduledImagePost(string $pageAccessToken, string $pageId, string $imageUrl, ?string $caption, int $scheduledPublishTime): array;
+
+    /**
      * Comment on a Facebook post or comment. Facebook exposes both under the same
      * `/{object-id}/comments` edge, so $objectId may be a post id (top-level comment)
      * or a comment id (reply).

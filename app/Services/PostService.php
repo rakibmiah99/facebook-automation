@@ -12,6 +12,7 @@ use App\Models\PostContent;
 use App\Repositories\FacebookRepositoryInterface;
 use App\Repositories\MediaHelperRepositoryInterface;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
@@ -239,6 +240,85 @@ class PostService
         }
 
         return $summary;
+    }
+
+    /**
+     * Schedule one image post on a single Facebook Page using Facebook's own native scheduling
+     * contract (`published=false` + `scheduled_publish_time`), instead of createFromContentPath()'s
+     * `is_scheduled` flag — which nothing ever revisits to actually publish. Here, Facebook
+     * assigns the post its final id and validates the scheduling window immediately, so a bad
+     * scheduled_at fails loudly right away instead of quietly sitting in the database forever.
+     */
+    public function scheduleFromContentPath(
+        FacebookAppAccount $account,
+        string $contentPath,
+        ?string $caption,
+        string $scheduledAt,
+        ?string $commentMessage = null,
+        ?int $templateId = null,
+        ?int $templateGenerationId = null,
+    ): Post {
+        abort_unless($account->user_id === Auth::id(), 403);
+
+        $scheduledPublishTime = Carbon::parse($scheduledAt);
+
+        $this->assertWithinFacebookSchedulingWindow($scheduledPublishTime);
+
+        $imageUrl = UtilsHelper::GetMediaUrl($contentPath);
+
+        $response = $this->facebookRepository->createScheduledImagePost(
+            $account->access_token,
+            $account->account_id,
+            $imageUrl,
+            $caption,
+            $scheduledPublishTime->getTimestamp(),
+        );
+
+        $postId = $response['post_id'] ?? $response['id'] ?? null;
+
+        $post = Post::create([
+            'facebook_app_account_id' => $account->id,
+            'user_id' => Auth::id(),
+            'template_id' => $templateId,
+            'template_generation_id' => $templateGenerationId,
+            'post_id' => $postId,
+            'is_published' => false,
+            'is_scheduled' => true,
+            'scheduled_at' => $scheduledPublishTime,
+            'post_type' => 'image',
+        ]);
+
+        PostContent::create([
+            'post_id' => $post->id,
+            'content_type' => 'image',
+            'content_text' => $caption,
+            'content_path' => $contentPath,
+        ]);
+
+        // Same best-effort comment attempt createFromContentPath() makes on immediate posts.
+        // Facebook may reject a comment on a not-yet-published scheduled post — attemptComment()
+        // already swallows that failure and records comment_id: null rather than breaking the
+        // request, since the post itself was already scheduled successfully.
+        $this->attemptComment($post, $account->access_token, $postId, filled($commentMessage), $commentMessage, null, null);
+
+        return $post;
+    }
+
+    /**
+     * Facebook rejects scheduled_publish_time outside [10 minutes, 75 days] from now — checked
+     * here so that failure is a clear message rather than an opaque Graph API error.
+     */
+    private function assertWithinFacebookSchedulingWindow(Carbon $scheduledPublishTime): void
+    {
+        $now = Carbon::now();
+
+        if ($scheduledPublishTime->lessThan($now->clone()->addMinutes(10))) {
+            throw new RuntimeException('Facebook requires scheduled posts to be at least 10 minutes in the future.');
+        }
+
+        if ($scheduledPublishTime->greaterThan($now->clone()->addDays(75))) {
+            throw new RuntimeException('Facebook does not allow scheduling posts more than 75 days in the future.');
+        }
     }
 
     /**

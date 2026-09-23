@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TemplateImageGenerateRequest;
+use App\Http\Requests\TemplateImageScheduleRequest;
 use App\Models\Template;
 use App\Services\TemplateImageGenerationService;
 use Illuminate\Http\Request;
@@ -49,6 +50,24 @@ class TemplateImageController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Template image generated successfully.',
+            'data' => $result,
+        ]);
+    }
+
+    public function schedulePost(TemplateImageScheduleRequest $request, Template $template)
+    {
+        $result = $this->templateImageGenerationService->schedule(
+            $template,
+            $request->validated('values', []),
+            $request->validated('page_id'),
+            $request->validated('scheduled_at'),
+            $request->validated('caption'),
+            $request->validated('comment_message'),
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Template image scheduled successfully.',
             'data' => $result,
         ]);
     }

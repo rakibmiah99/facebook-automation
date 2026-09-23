@@ -131,6 +131,76 @@ class TemplateImageGenerationService
     ): array {
         $this->authorizeAccess($template);
 
+        $generation = $this->renderAndStoreGeneration($template, $values);
+
+        $result = [
+            'url' => UtilsHelper::GetMediaUrl($generation->path),
+            'path' => $generation->path,
+            'template_id' => $template->id,
+            'generation_id' => $generation->id,
+            'page_posted' => false,
+            'permalink' => null,
+        ];
+
+        if ($pageId) {
+            return array_merge($result, $this->publishToPage($generation, $pageId, $caption, $commentMessage));
+        }
+
+        return $result;
+    }
+
+    /**
+     * API counterpart to generate() that schedules the result on one Facebook Page using
+     * Facebook's own native scheduling contract (`published=false` + `scheduled_publish_time`)
+     * instead of generate()'s immediate publishToPage() — see
+     * PostService::scheduleFromContentPath(). Unlike createFromContentPath()'s `is_scheduled`
+     * flag, which nothing ever revisits, Facebook itself owns publishing the post at
+     * $scheduledAt and assigns the post its final id right away.
+     *
+     * @param  array<string, mixed>  $values
+     * @param  int  $pageId  A FacebookAppAccount id owned by the caller (validated in
+     *   TemplateImageScheduleRequest) — scheduling always targets exactly one Page.
+     * @param  string  $scheduledAt  Any date/time string Carbon can parse; must fall within
+     *   Facebook's own 10-minute-to-75-day scheduling window (also validated in the request).
+     * @param  string|null  $commentMessage  First comment to add after scheduling, if non-empty
+     *   — same best-effort semantics as generate()'s $commentMessage.
+     * @return array{
+     *     url: string|null, path: string, template_id: int, generation_id: int,
+     *     page_scheduled: bool, scheduled_post_id: string|null, scheduled_publish_time: string|null,
+     * }
+     */
+    public function schedule(
+        Template $template,
+        array $values,
+        int $pageId,
+        string $scheduledAt,
+        ?string $caption = null,
+        ?string $commentMessage = null,
+    ): array {
+        $this->authorizeAccess($template);
+
+        $generation = $this->renderAndStoreGeneration($template, $values);
+
+        $result = [
+            'url' => UtilsHelper::GetMediaUrl($generation->path),
+            'path' => $generation->path,
+            'template_id' => $template->id,
+            'generation_id' => $generation->id,
+            'page_scheduled' => false,
+            'scheduled_post_id' => null,
+            'scheduled_publish_time' => null,
+        ];
+
+        return array_merge($result, $this->scheduleToPage($generation, $pageId, $scheduledAt, $caption, $commentMessage));
+    }
+
+    /**
+     * Renders the template to HTML, captures it with Browsershot, and stores the resulting PNG
+     * through the Media Helper — the part shared by generate() (immediate/optional-publish) and
+     * schedule() (always-scheduled).
+     */
+    private function renderAndStoreGeneration(Template $template, array $values): TemplateGeneration
+    {
         $model = $this->templateRenderService->build($template, $values);
 
         $html = view('templates.render', [
@@ -160,27 +230,12 @@ class TemplateImageGenerationService
             }
         }
 
-        $generation = TemplateGeneration::create([
+        return TemplateGeneration::create([
             'template_id' => $template->id,
             'user_id' => Auth::id(),
             'path' => $path,
             'values' => $values ?: null,
         ]);
-
-        $result = [
-            'url' => UtilsHelper::GetMediaUrl($path),
-            'path' => $path,
-            'template_id' => $template->id,
-            'generation_id' => $generation->id,
-            'page_posted' => false,
-            'permalink' => null,
-        ];
-
-        if ($pageId) {
-            return array_merge($result, $this->publishToPage($generation, $pageId, $caption, $commentMessage));
-        }
-
-        return $result;
     }
 
     /**
@@ -248,6 +303,53 @@ class TemplateImageGenerationService
             ]);
 
             return ['page_posted' => false, 'permalink' => null];
+        }
+    }
+
+    /**
+     * Schedules an already-generated image on one Facebook Page via
+     * PostService::scheduleFromContentPath() — the native Graph API counterpart to
+     * publishToPage(). A failure here never fails the request: the image was already generated
+     * successfully, so it's reported via page_scheduled: false rather than discarding a
+     * successful generation over a Facebook-side error.
+     *
+     * @return array{page_scheduled: bool, scheduled_post_id: string|null, scheduled_publish_time: string|null}
+     */
+    private function scheduleToPage(TemplateGeneration $generation, int $pageId, string $scheduledAt, ?string $caption, ?string $commentMessage = null): array
+    {
+        try {
+            // Ownership already validated in TemplateImageScheduleRequest's page_id rule — this
+            // just fetches the model that validation already confirmed exists and belongs to
+            // the caller.
+            $account = FacebookAppAccount::query()
+                ->where('id', $pageId)
+                ->where('user_id', Auth::id())
+                ->firstOrFail();
+
+            $post = $this->postService->scheduleFromContentPath(
+                account: $account,
+                contentPath: $generation->path,
+                caption: $caption,
+                scheduledAt: $scheduledAt,
+                commentMessage: $commentMessage,
+                templateId: $generation->template_id,
+                templateGenerationId: $generation->id,
+            );
+
+            return [
+                'page_scheduled' => true,
+                'scheduled_post_id' => $post->post_id,
+                'scheduled_publish_time' => optional($post->scheduled_at)->toIso8601String(),
+            ];
+        } catch (Throwable $e) {
+            Log::error('Failed to schedule a generated template image on a Facebook Page.', [
+                'template_generation_id' => $generation->id,
+                'page_id' => $pageId,
+                'user_id' => Auth::id(),
+                'exception' => $e->getMessage(),
+            ]);
+
+            return ['page_scheduled' => false, 'scheduled_post_id' => null, 'scheduled_publish_time' => null];
         }
     }
 

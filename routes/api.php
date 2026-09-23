@@ -26,5 +26,9 @@ Route::middleware('auth:sanctum')->name('api.')->group(function () {
         Route::get('/{template}', [TemplateImageController::class, 'show'])->name('show');
         // render + store the image, returns its url/path
         Route::post('/{template}/generate-image', [TemplateImageController::class, 'generate'])->name('generate-image');
+        // render + store the image, then schedule it on one Facebook Page using Facebook's own
+        // native scheduling (published=false + scheduled_publish_time) — see
+        // TemplateImageGenerationService::schedule() / PostService::scheduleFromContentPath().
+        Route::post('/{template}/schedule-post', [TemplateImageController::class, 'schedulePost'])->name('schedule-post');
     });
 });
