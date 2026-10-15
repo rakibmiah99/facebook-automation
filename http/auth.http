@@ -1,0 +1,27 @@
+### Variables
+#@host = http://127.0.0.1:8000
+@host = https://fb-automation.codebondhu.com
+@email = rakibmiah120199@gmail.com
+@password = 123456
+@deviceName = rest-client
+
+###
+# @name login
+# Public endpoint — email/password দিয়ে Sanctum bearer token নেয়।
+# এই response-এর data.token পরের request গুলোতে Authorization header-এ ব্যবহার করুন
+# (VSCode REST Client হলে নিচের মত {{login.response.body.$.data.token}} অটো-রেজলভ হবে)।
+POST {{host}}/api/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "device_name": "{{deviceName}}"
+}
+
+### Logged-in user (sanity check — token valid কিনা যাচাই করতে)
+GET {{host}}/api/user
+Authorization: Bearer 1|NnX5kWqHjbf6O8T3rhxDS9sG4HAotPGYL9vjsKedb4f84762
+
+
+#Token: 1|NnX5kWqHjbf6O8T3rhxDS9sG4HAotPGYL9vjsKedb4f84762

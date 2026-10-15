@@ -1,0 +1,63 @@
+### Variables — {{token}} লগইন করে auth.http থেকে বসান, {{templateId}}/{{pageId}} নিজের ডেটা অনুযায়ী বদলান
+#@host = http://127.0.0.1:8000
+@host = https://fb-automation.codebondhu.com
+@token = 1|NnX5kWqHjbf6O8T3rhxDS9sG4HAotPGYL9vjsKedb4f84762
+@templateId = 1
+@pageId = 2
+
+### টেমপ্লেট লিস্ট (common + own)
+GET {{host}}/api/templates
+Authorization: Bearer {{token}}
+
+### একটি নির্দিষ্ট টেমপ্লেট — fields + ready-to-use values_example
+GET {{host}}/api/templates/{{templateId}}
+Authorization: Bearer {{token}}
+
+### টেমপ্লেট থেকে image generate করুন (শুধু generate, কোনো page-এ পোস্ট হবে না — page_id বাদ দিলে)
+# values-এর key গুলো উপরের GET /templates/{{templateId}} রেসপন্সের values_example থেকে নিন
+POST {{host}}/api/templates/{{templateId}}/generate-image
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "values": {
+    "thumbnail_image": "https://files.agamirsomoy.com/bn-media/uploads/2026/10/28df8fcd-bf78-46b8-b62c-4ad1ebd0517c.webp",
+    "headline": "ভিসাপ্রত্যাশী ইকমিশন ভিসাপ্রত্যাশী বাংলাদেশিদের সতর্কবার্তা দিলো ভারতীয় হাইকমিশন",
+    "date": "15 Aug, 2026"
+  }
+}
+
+### টেমপ্লেট থেকে image generate করে সাথে সাথে একটি Facebook Page-এ পোস্ট করুন
+# page_id optional — দিলে generate + publish দুটোই একসাথে হবে
+POST {{host}}/api/templates/{{templateId}}/generate-image
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "values": {
+    "thumbnail_image": "https://files.agamirsomoy.com/bn-media/uploads/2026/10/28df8fcd-bf78-46b8-b62c-4ad1ebd0517c.webp",
+    "headline": "ভিসাপ্রত্যাশী ইকমিশন ভিসাপ্রত্যাশী বাংলাদেশিদের সতর্কবার্তা দিলো ভারতীয় হাইকমিশন",
+    "date": "15 Aug, 2026"
+  },
+  "page_id": {{pageId}},
+  "caption": "Check out our new post!",
+  "comment_message": "First comment on the post"
+}
+
+### টেমপ্লেট থেকে image generate করে Facebook-এর নিজস্ব scheduling দিয়ে শিডিউল করুন
+# page_id required, scheduled_at অবশ্যই এখন থেকে 10 মিনিট পর থেকে 75 দিনের মধ্যে হতে হবে (ISO 8601 / Y-m-d H:i:s)
+POST {{host}}/api/templates/{{templateId}}/schedule-post
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "values": {
+    "headline": "Sample Headline",
+    "subheading": "Sample subheading text",
+    "logo": "https://example.com/logo.png"
+  },
+  "page_id": {{pageId}},
+  "scheduled_at": "2026-10-20 15:00:00",
+  "caption": "Scheduled post caption",
+  "comment_message": "First comment on the scheduled post"
+}

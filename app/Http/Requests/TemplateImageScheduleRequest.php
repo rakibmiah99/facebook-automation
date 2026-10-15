@@ -46,8 +46,10 @@ class TemplateImageScheduleRequest extends FormRequest
             'caption' => ['nullable', 'string'],
             'comment_message' => ['nullable', 'string'],
 
-            // Facebook's own native scheduling window: 10 minutes to 75 days from now.
-            'scheduled_at' => ['required', 'date', 'after:now +10 minutes', 'before:now +75 days'],
+            // Optional: omit to publish immediately. When given, it must fall within Facebook's
+            // own native scheduling window (10 minutes to 75 days from now) and is used as-is —
+            // the post goes out at exactly this date/time, nothing is added to it.
+            'scheduled_at' => ['nullable', 'date', 'after:now +10 minutes', 'before:now +75 days'],
         ];
 
         // {template} is already route-model-bound by the time FormRequest rules are evaluated

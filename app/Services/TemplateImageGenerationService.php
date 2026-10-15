@@ -150,22 +150,23 @@ class TemplateImageGenerationService
     }
 
     /**
-     * API counterpart to generate() that schedules the result on one Facebook Page using
-     * Facebook's own native scheduling contract (`published=false` + `scheduled_publish_time`)
-     * instead of generate()'s immediate publishToPage() — see
-     * PostService::scheduleFromContentPath(). Unlike createFromContentPath()'s `is_scheduled`
-     * flag, which nothing ever revisits, Facebook itself owns publishing the post at
-     * $scheduledAt and assigns the post its final id right away.
+     * API counterpart to generate() that publishes the result to one Facebook Page — either
+     * immediately (same pipeline as generate()'s publishToPage()) or, when $scheduledAt is
+     * given, via Facebook's own native scheduling contract (`published=false` +
+     * `scheduled_publish_time`, see PostService::scheduleFromContentPath()). $scheduledAt is
+     * used exactly as given — it must already fall within Facebook's own 10-minute-to-75-day
+     * scheduling window (validated in TemplateImageScheduleRequest), nothing is added to it.
      *
      * @param  array<string, mixed>  $values
      * @param  int  $pageId  A FacebookAppAccount id owned by the caller (validated in
-     *   TemplateImageScheduleRequest) — scheduling always targets exactly one Page.
-     * @param  string  $scheduledAt  Any date/time string Carbon can parse; must fall within
-     *   Facebook's own 10-minute-to-75-day scheduling window (also validated in the request).
-     * @param  string|null  $commentMessage  First comment to add after scheduling, if non-empty
-     *   — same best-effort semantics as generate()'s $commentMessage.
+     *   TemplateImageScheduleRequest) — targets exactly one Page either way.
+     * @param  string|null  $scheduledAt  Any date/time string Carbon can parse, or null to
+     *   publish immediately instead of scheduling.
+     * @param  string|null  $commentMessage  First comment to add after publishing/scheduling, if
+     *   non-empty — same best-effort semantics as generate()'s $commentMessage.
      * @return array{
      *     url: string|null, path: string, template_id: int, generation_id: int,
+     *     page_posted: bool, permalink: string|null,
      *     page_scheduled: bool, scheduled_post_id: string|null, scheduled_publish_time: string|null,
      * }
      */
@@ -173,7 +174,7 @@ class TemplateImageGenerationService
         Template $template,
         array $values,
         int $pageId,
-        string $scheduledAt,
+        ?string $scheduledAt,
         ?string $caption = null,
         ?string $commentMessage = null,
     ): array {
@@ -186,10 +187,16 @@ class TemplateImageGenerationService
             'path' => $generation->path,
             'template_id' => $template->id,
             'generation_id' => $generation->id,
+            'page_posted' => false,
+            'permalink' => null,
             'page_scheduled' => false,
             'scheduled_post_id' => null,
             'scheduled_publish_time' => null,
         ];
+
+        if ($scheduledAt === null) {
+            return array_merge($result, $this->publishToPage($generation, $pageId, $caption, $commentMessage));
+        }
 
         return array_merge($result, $this->scheduleToPage($generation, $pageId, $scheduledAt, $caption, $commentMessage));
     }

@@ -1,0 +1,8 @@
+### Variables
+#@host = http://127.0.0.1:8000
+@host = https://fb-automation.codebondhu.com
+@token = 1|NnX5kWqHjbf6O8T3rhxDS9sG4HAotPGYL9vjsKedb4f84762
+
+### আমার Facebook Apps + সেগুলোর অ্যাকাউন্ট (Pages) লিস্ট
+GET {{host}}/api/my-apps
+Authorization: Bearer {{token}}
