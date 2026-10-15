@@ -23,6 +23,6 @@ class DatabaseSeeder extends Seeder
             'password' => bcrypt('123456'),
         ]);
 
-        Artisan::call('user:make-admin {email}', ['email' => 'rakibmiah120199@gmail.com']);
+        Artisan::call('user:make-admin rakibmiah120199@gmail.com');
     }
 }
