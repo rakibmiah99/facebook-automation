@@ -24,12 +24,10 @@ Route::middleware('auth:sanctum')->name('api.')->group(function () {
         Route::get('/', [TemplateImageController::class, 'index'])->name('index');
         // one template's fields + a ready-to-use `values` example
         Route::get('/{template}', [TemplateImageController::class, 'show'])->name('show');
-        // render + store the image, returns its url/path
+        // render + store the image, returns its url/path. With a page_id it's also posted to that
+        // one Facebook Page — immediately if scheduled_at is omitted, or at that exact date/time
+        // via Facebook's own native scheduling (published=false + scheduled_publish_time) when
+        // it's given — see TemplateImageGenerationService::generate().
         Route::post('/{template}/generate-image', [TemplateImageController::class, 'generate'])->name('generate-image');
-        // render + store the image, then publish it to one Facebook Page — immediately if
-        // scheduled_at is omitted, or at that exact date/time via Facebook's own native
-        // scheduling (published=false + scheduled_publish_time) when it's given — see
-        // TemplateImageGenerationService::schedule() / PostService::scheduleFromContentPath().
-        Route::post('/{template}/schedule-post', [TemplateImageController::class, 'schedulePost'])->name('schedule-post');
     });
 });

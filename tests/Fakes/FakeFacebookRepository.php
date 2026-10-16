@@ -30,6 +30,11 @@ class FakeFacebookRepository implements FacebookRepositoryInterface
         return ['id' => 'fake_photo_'.uniqid(), 'post_id' => 'fake_post_'.uniqid()];
     }
 
+    public function createScheduledImagePost(string $pageAccessToken, string $pageId, string $imageUrl, ?string $caption, int $scheduledPublishTime): array
+    {
+        return ['id' => 'fake_photo_'.uniqid(), 'post_id' => 'fake_post_'.uniqid()];
+    }
+
     public function createComment(string $pageAccessToken, string $postId, ?string $message = null, ?string $attachmentUrl = null): array
     {
         return ['id' => 'fake_comment_'.uniqid()];

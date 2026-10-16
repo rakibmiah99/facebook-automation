@@ -9,6 +9,7 @@ use App\Models\Template;
 use App\Models\TemplateGeneration;
 use App\Repositories\MediaHelperRepositoryInterface;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -28,17 +29,16 @@ class TemplateImageGenerationService
         private TemplateRenderService $templateRenderService,
         private MediaHelperRepositoryInterface $mediaHelper,
         private PostService $postService,
-    ) {
-    }
+    ) {}
 
     /**
      * Templates visible to the given user (common + their own), for API consumers to discover
      * what's available before generating — mirrors Template::scopeVisibleTo(), the same
      * visibility rule TemplateService::index() already uses for the web UI's template list.
      *
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     * @return Collection<int, array<string, mixed>>
      */
-    public function listAvailable(int $userId): \Illuminate\Support\Collection
+    public function listAvailable(int $userId): Collection
     {
         return Template::query()
             ->visibleTo($userId)
@@ -110,16 +110,26 @@ class TemplateImageGenerationService
     }
 
     /**
+     * Renders + stores the template image, then optionally hands it to one Facebook Page:
+     *   - no $pageId                → generate only
+     *   - $pageId, no $scheduledAt  → publish immediately (publishToPage())
+     *   - $pageId + $scheduledAt    → Facebook's own native scheduling (`published=false` +
+     *     `scheduled_publish_time`, see PostService::scheduleFromContentPath()). $scheduledAt is
+     *     used exactly as given — it must already fall within Facebook's 10-minute-to-75-day
+     *     window (validated in TemplateImageGenerateRequest), nothing is added to it.
+     *
      * @param  array<string, mixed>  $values
      * @param  int|null  $pageId  A FacebookAppAccount id owned by the caller (validated in
-     *   TemplateImageGenerateRequest) — when given, the generated image is also published to
-     *   that one Page immediately after generation. Omit to only generate the image.
+     *                            TemplateImageGenerateRequest). Omit to only generate the image.
      * @param  string|null  $caption  Post caption; only used when $pageId is given.
-     * @param  string|null  $commentMessage  First comment to add after publishing, if non-empty;
-     *   only used when $pageId is given.
+     * @param  string|null  $commentMessage  First comment to add after publishing/scheduling, if
+     *                                       non-empty; only used when $pageId is given.
+     * @param  string|null  $scheduledAt  Any date/time string Carbon can parse, or null to
+     *                                    publish immediately; only used when $pageId is given.
      * @return array{
      *     url: string|null, path: string, template_id: int, generation_id: int,
      *     page_posted: bool, permalink: string|null,
+     *     page_scheduled: bool, scheduled_post_id: string|null, scheduled_publish_time: string|null,
      * }
      */
     public function generate(
@@ -128,55 +138,7 @@ class TemplateImageGenerationService
         ?int $pageId = null,
         ?string $caption = null,
         ?string $commentMessage = null,
-    ): array {
-        $this->authorizeAccess($template);
-
-        $generation = $this->renderAndStoreGeneration($template, $values);
-
-        $result = [
-            'url' => UtilsHelper::GetMediaUrl($generation->path),
-            'path' => $generation->path,
-            'template_id' => $template->id,
-            'generation_id' => $generation->id,
-            'page_posted' => false,
-            'permalink' => null,
-        ];
-
-        if ($pageId) {
-            return array_merge($result, $this->publishToPage($generation, $pageId, $caption, $commentMessage));
-        }
-
-        return $result;
-    }
-
-    /**
-     * API counterpart to generate() that publishes the result to one Facebook Page — either
-     * immediately (same pipeline as generate()'s publishToPage()) or, when $scheduledAt is
-     * given, via Facebook's own native scheduling contract (`published=false` +
-     * `scheduled_publish_time`, see PostService::scheduleFromContentPath()). $scheduledAt is
-     * used exactly as given — it must already fall within Facebook's own 10-minute-to-75-day
-     * scheduling window (validated in TemplateImageScheduleRequest), nothing is added to it.
-     *
-     * @param  array<string, mixed>  $values
-     * @param  int  $pageId  A FacebookAppAccount id owned by the caller (validated in
-     *   TemplateImageScheduleRequest) — targets exactly one Page either way.
-     * @param  string|null  $scheduledAt  Any date/time string Carbon can parse, or null to
-     *   publish immediately instead of scheduling.
-     * @param  string|null  $commentMessage  First comment to add after publishing/scheduling, if
-     *   non-empty — same best-effort semantics as generate()'s $commentMessage.
-     * @return array{
-     *     url: string|null, path: string, template_id: int, generation_id: int,
-     *     page_posted: bool, permalink: string|null,
-     *     page_scheduled: bool, scheduled_post_id: string|null, scheduled_publish_time: string|null,
-     * }
-     */
-    public function schedule(
-        Template $template,
-        array $values,
-        int $pageId,
-        ?string $scheduledAt,
-        ?string $caption = null,
-        ?string $commentMessage = null,
+        ?string $scheduledAt = null,
     ): array {
         $this->authorizeAccess($template);
 
@@ -194,6 +156,10 @@ class TemplateImageGenerationService
             'scheduled_publish_time' => null,
         ];
 
+        if (! $pageId) {
+            return $result;
+        }
+
         if ($scheduledAt === null) {
             return array_merge($result, $this->publishToPage($generation, $pageId, $caption, $commentMessage));
         }
@@ -203,8 +169,7 @@ class TemplateImageGenerationService
 
     /**
      * Renders the template to HTML, captures it with Browsershot, and stores the resulting PNG
-     * through the Media Helper — the part shared by generate() (immediate/optional-publish) and
-     * schedule() (always-scheduled).
+     * through the Media Helper.
      */
     private function renderAndStoreGeneration(Template $template, array $values): TemplateGeneration
     {
@@ -249,7 +214,7 @@ class TemplateImageGenerationService
      * Publishes an already-generated image to one Facebook Page — reuses the exact same
      * publish pipeline the web customize page's "Create Post" step uses
      * (PostService::createFromContentPath), just with a single-account collection and no
-     * scheduling (this API is immediate-publish only). A failure here never fails the request:
+     * scheduling (scheduling goes through scheduleToPage() instead). A failure here never fails the request:
      * the image was already generated successfully, so it's reported via page_posted: false
      * rather than discarding a successful generation over a Facebook-side error.
      *
@@ -325,7 +290,7 @@ class TemplateImageGenerationService
     private function scheduleToPage(TemplateGeneration $generation, int $pageId, string $scheduledAt, ?string $caption, ?string $commentMessage = null): array
     {
         try {
-            // Ownership already validated in TemplateImageScheduleRequest's page_id rule — this
+            // Ownership already validated in TemplateImageGenerateRequest's page_id rule — this
             // just fetches the model that validation already confirmed exists and belongs to
             // the caller.
             $account = FacebookAppAccount::query()

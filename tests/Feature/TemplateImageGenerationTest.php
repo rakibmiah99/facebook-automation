@@ -401,6 +401,64 @@ class TemplateImageGenerationTest extends TestCase
             ->assertJsonValidationErrors(['page_id']);
     }
 
+    public function test_generate_with_a_page_id_and_scheduled_at_schedules_on_facebook(): void
+    {
+        $this->skipIfChromeUnavailable();
+
+        $template = $this->createCommonTemplate();
+        $user = User::factory()->create();
+        $account = $this->createAccountFor($user);
+        Sanctum::actingAs($user);
+
+        $scheduledAt = now()->addDay()->startOfMinute();
+
+        $response = $this->postJson(route('api.templates.generate-image', ['template' => $template->id]), [
+            'page_id' => $account->id,
+            'caption' => 'Scheduled caption',
+            'scheduled_at' => $scheduledAt->toDateTimeString(),
+        ])
+            ->assertOk()
+            ->assertJson(['status' => true, 'data' => ['page_scheduled' => true, 'page_posted' => false]]);
+
+        $this->assertNotEmpty($response->json('data.scheduled_post_id'));
+
+        $this->assertDatabaseHas('posts', [
+            'facebook_app_account_id' => $account->id,
+            'template_generation_id' => $response->json('data.generation_id'),
+            'is_scheduled' => true,
+            'is_published' => false,
+        ]);
+    }
+
+    public function test_scheduled_at_without_a_page_id_is_rejected(): void
+    {
+        $template = $this->createCommonTemplate();
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson(route('api.templates.generate-image', ['template' => $template->id]), [
+            'scheduled_at' => now()->addDay()->toDateTimeString(),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['scheduled_at']);
+    }
+
+    public function test_scheduled_at_outside_facebooks_window_is_rejected(): void
+    {
+        $template = $this->createCommonTemplate();
+        $user = User::factory()->create();
+        $account = $this->createAccountFor($user);
+        Sanctum::actingAs($user);
+
+        foreach ([now()->addMinutes(5), now()->addDays(80)] as $scheduledAt) {
+            $this->postJson(route('api.templates.generate-image', ['template' => $template->id]), [
+                'page_id' => $account->id,
+                'scheduled_at' => $scheduledAt->toDateTimeString(),
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['scheduled_at']);
+        }
+    }
+
     private function skipIfChromeUnavailable(): void
     {
         if (empty(config('browsershot.chrome_path'))) {

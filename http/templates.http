@@ -44,9 +44,10 @@ Content-Type: application/json
   "comment_message": "First comment on the post"
 }
 
-### টেমপ্লেট থেকে image generate করে Facebook-এর নিজস্ব scheduling দিয়ে শিডিউল করুন
-# page_id required, scheduled_at অবশ্যই এখন থেকে 10 মিনিট পর থেকে 75 দিনের মধ্যে হতে হবে (ISO 8601 / Y-m-d H:i:s)
-POST {{host}}/api/templates/{{templateId}}/schedule-post
+### টেমপ্লেট থেকে image generate করে Facebook-এর নিজস্ব scheduling দিয়ে শিডিউল করুন (একই endpoint)
+# scheduled_at nullable — বাদ দিলে সাথে সাথে publish হবে, দিলে ঐ সময়ে Facebook-এ schedule হবে
+# scheduled_at দিলে page_id লাগবে, এবং সময় এখন থেকে 10 মিনিট পর থেকে 75 দিনের মধ্যে হতে হবে (ISO 8601 / Y-m-d H:i:s)
+POST {{host}}/api/templates/{{templateId}}/generate-image
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
